@@ -5,9 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Guard Pro - Gravação Ativa</title>
     
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
-    <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
+   // Garante que o código só rode após a página carregar totalmente
+window.onload = function() {
+    console.log("Sistema Smart Guard carregado e pronto.");
+    document.getElementById('status').innerText = "Sistema Pronto - Escolha um modo";
+};
 
     <style>
         body { font-family: sans-serif; margin: 0; background: #0f0f0f; color: white; text-align: center; }
@@ -125,3 +127,4 @@
                     iniciarGravacao();
                 }
             } else {
+
