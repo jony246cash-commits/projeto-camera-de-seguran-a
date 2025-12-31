@@ -3,79 +3,84 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Guard Pro - Download Remoto</title>
+    <title>Smart Guard Pro - Multi-Monitor</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
 
     <style>
-        body { font-family: sans-serif; margin: 0; background: #000; color: #fff; text-align: center; }
-        .status-badge { padding: 15px; background: #1a1a1a; font-size: 14px; border-bottom: 2px solid #333; }
-        .modo-alerta { background: #b91c1c !important; font-weight: bold; animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.6; } }
+        body { font-family: sans-serif; margin: 0; background: #0a0a0a; color: #fff; text-align: center; }
+        .status-badge { padding: 12px; background: #1a1a1a; font-size: 13px; border-bottom: 2px solid #333; color: #10b981; }
         
-        #video-display { width: 100%; max-width: 600px; margin: auto; background: #000; }
-        video { width: 100%; height: auto; border-radius: 8px; }
-        
+        /* Menu e Botões */
         .painel { padding: 30px 20px; }
-        button { width: 85%; max-width: 300px; padding: 20px; margin: 10px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        button { width: 85%; max-width: 300px; padding: 18px; margin: 8px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 15px; }
         .btn-cam { background: #059669; color: white; }
         .btn-mon { background: #2563eb; color: white; }
         
-        .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; padding: 20px; }
-        .card-video { background: #222; padding: 10px; border-radius: 8px; border: 1px solid #444; text-align: center; }
-        .card-video video { width: 100%; margin-bottom: 8px; }
-        .btn-download { color: #22d3ee; text-decoration: none; font-size: 12px; font-weight: bold; border: 1px solid #22d3ee; padding: 5px; border-radius: 4px; display: inline-block; }
+        /* Estilo Monitor Multi-Câmera */
+        .camera-card { background: #1a1a1a; margin: 10px auto; padding: 15px; width: 90%; border-radius: 12px; border: 1px solid #333; text-align: left; }
+        .camera-card.alert { border-color: #ef4444; background: #2d0a0a; }
+        .cam-name { font-weight: bold; color: #60a5fa; }
+        
+        /* Players de Vídeo */
+        .video-wrapper { width: 100%; max-width: 500px; margin: 10px auto; display: none; border-radius: 8px; overflow: hidden; border: 2px solid #ef4444; }
+        video { width: 100%; background: #000; }
+
+        /* Galeria de Provas */
+        .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 15px; }
+        .prova-item { background: #222; padding: 8px; border-radius: 8px; font-size: 11px; }
+        .prova-item video { width: 100%; border-radius: 4px; }
+        .btn-dl { color: #22d3ee; display: block; margin-top: 5px; text-decoration: none; border: 1px solid #22d3ee; padding: 3px; border-radius: 4px; }
     </style>
 </head>
 <body>
 
-    <div id="status" class="status-badge">✅ Sistema Pronto</div>
+    <div id="status" class="status-badge">🟡 Aguardando Inicialização...</div>
 
     <div id="menu-inicial" class="painel">
-        <h1>🛡️ Smart Guard</h1>
-        <p>Vigilância Inteligente com Provas Remotas</p>
-        <button id="btnCam" class="btn-cam">MODO CÂMERA</button>
-        <button id="btnMon" class="btn-mon">MODO MONITOR</button>
+        <h1>🛡️ Smart Guard Multi</h1>
+        <button id="btnCam" class="btn-cam">MODO CÂMERA (Este aparelho filma)</button>
+        <button id="btnMon" class="btn-mon">MODO MONITOR (Ver todas as câmeras)</button>
     </div>
 
     <div id="tela-camera" style="display:none;">
-        <div id="video-display">
-            <video id="webcam" autoplay muted playsinline></video>
-        </div>
-        <h4>Minhas Gravações (Locais)</h4>
-        <div id="galeria-camera" class="galeria"></div>
+        <video id="webcam" autoplay muted playsinline></video>
+        <p>Aparelho configurado como câmera.</p>
     </div>
 
-    <div id="tela-monitor" style="display:none; padding: 20px;">
-        <div id="alerta-live" style="display:none; border: 4px solid #ef4444; margin-bottom: 20px; border-radius: 12px; overflow: hidden;">
-            <h3 style="background:#ef4444; margin:0; padding:10px;">🔴 AO VIVO: INVASOR</h3>
-            <video id="remote-video" autoplay playsinline></video>
-        </div>
-        <input type="text" id="id-camera" placeholder="Digite o ID da Câmera" style="padding:15px; width:80%; border-radius:8px; border:1px solid #444; background:#111; color:white;">
-        <button id="btnConectar" class="btn-mon" style="margin-top:15px;">CONECTAR</button>
+    <div id="tela-monitor" style="display:none; padding-bottom: 50px;">
+        <h3>Central de Monitoramento</h3>
         
-        <hr style="border: 0; border-top: 1px solid #333; margin: 30px 0;">
-        <h4>Vídeos Recebidos (Provas Remotas)</h4>
-        <div id="galeria-monitor" class="galeria"></div>
+        <div style="background:#1a1a1a; padding:15px; margin:10px; border-radius:10px;">
+            <input type="text" id="id-nova-camera" placeholder="ID da Câmera (ex: sala)" style="padding:12px; width:60%; border-radius:8px; border:none;">
+            <button id="btnAdd" style="width:30%; padding:12px; margin:0; font-size:12px;" class="btn-mon">ADICIONAR</button>
+        </div>
+
+        <div id="lista-cameras">
+            </div>
+
+        <h4>📦 Provas Recebidas</h4>
+        <div id="galeria-provas" class="galeria"></div>
     </div>
 
     <script>
-        let model, peer, localStream, mediaRecorder;
+        let peer, localStream, model, mediaRecorder;
         let chunks = [];
         let gravando = false;
-        let conexoesAtivas = [];
+        let conexoes = {}; // Armazena múltiplas conexões: { 'sala': conn, 'cozinha': conn }
 
         window.onload = () => {
-            document.getElementById('btnCam').onclick = iniciarModoCamera;
-            document.getElementById('btnMon').onclick = iniciarModoMonitor;
-            document.getElementById('btnConectar').onclick = conectarMonitor;
+            document.getElementById('status').innerText = "✅ Pronto";
+            document.getElementById('btnCam').onclick = modoCamera;
+            document.getElementById('btnMon').onclick = modoMonitor;
+            document.getElementById('btnAdd').onclick = conectarNovaCamera;
         };
 
-        // --- LÓGICA CÂMERA ---
-        async function iniciarModoCamera() {
-            const id = prompt("Crie um ID para esta câmera:");
+        // --- LÓGICA DO APARELHO QUE É CÂMERA ---
+        async function modoCamera() {
+            const id = prompt("Nome desta câmera (ex: sala, garagem):");
             if (!id) return;
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
@@ -84,106 +89,118 @@
                 document.getElementById('tela-camera').style.display = 'block';
 
                 peer = new Peer(id);
-                peer.on('open', () => document.getElementById('status').innerText = "ONLINE: " + id);
-                peer.on('connection', conn => conexoesAtivas.push(conn));
+                peer.on('connection', conn => {
+                    conexoes[conn.peer] = conn;
+                    document.getElementById('status').innerText = "Conectado ao Monitor Central";
+                });
 
-                document.getElementById('status').innerText = "⚙️ Carregando IA...";
                 model = await cocoSsd.load({ base: 'mobilenet_v1' });
-                document.getElementById('status').innerText = "🛡️ Proteção Ativa";
-                loopDeteccao();
-            } catch (e) { alert("Erro Câmera: " + e.message); }
+                loop();
+            } catch (e) { alert("Erro: " + e.message); }
         }
 
-        async function loopDeteccao() {
-            const predictions = await model.detect(document.getElementById('webcam'));
-            const invasor = predictions.some(p => p.class === 'person' && p.score > 0.6);
+        async function loop() {
+            const pred = await model.detect(document.getElementById('webcam'));
+            const invasor = pred.some(p => p.class === 'person' && p.score > 0.6);
 
-            if (invasor) {
-                document.getElementById('status').innerText = "⚠️ INVASOR DETECTADO!";
-                document.getElementById('status').classList.add('modo-alerta');
-                if (!gravando) iniciarGravacao();
-            } else {
-                if (gravando) pararGravacao();
-                document.getElementById('status').classList.remove('modo-alerta');
-                document.getElementById('status').innerText = "Monitorando...";
+            if (invasor && !gravando) {
+                gravando = true; chunks = [];
+                mediaRecorder = new MediaRecorder(localStream, { mimeType: 'video/webm' });
+                mediaRecorder.ondataavailable = e => chunks.push(e.data);
+                mediaRecorder.onstop = enviarProva;
+                mediaRecorder.start();
+                
+                // Avisa todos os monitores e envia vídeo ao vivo
+                Object.values(conexoes).forEach(c => {
+                    c.send({ tipo: 'alerta', estado: 'on' });
+                    peer.call(c.peer, localStream);
+                });
+            } else if (!invasor && gravando) {
+                gravando = false;
+                mediaRecorder.stop();
+                Object.values(conexoes).forEach(c => c.send({ tipo: 'alerta', estado: 'off' }));
             }
-            requestAnimationFrame(loopDeteccao);
+            requestAnimationFrame(loop);
         }
 
-        function iniciarGravacao() {
-            gravando = true;
-            chunks = [];
-            mediaRecorder = new MediaRecorder(localStream, { mimeType: 'video/webm' });
-            mediaRecorder.ondataavailable = e => chunks.push(e.data);
-            mediaRecorder.onstop = processarVideoFinal;
-            mediaRecorder.start();
-            conexoesAtivas.forEach(conn => peer.call(conn.peer, localStream));
-        }
-
-        function pararGravacao() {
-            gravando = false;
-            if (mediaRecorder) mediaRecorder.stop();
-            conexoesAtivas.forEach(conn => conn.send({ tipo: 'comando', valor: 'fechar_video' }));
-        }
-
-        function processarVideoFinal() {
+        function enviarProva() {
             const blob = new Blob(chunks, { type: 'video/webm' });
-            const url = URL.createObjectURL(blob);
-            
-            // 1. Mostrar na galeria local (Câmera)
-            adicionarNaGaleria('galeria-camera', url);
-
-            // 2. Enviar arquivo para o Monitor
             const reader = new FileReader();
-            reader.readAsDataURL(blob); 
+            reader.readAsDataURL(blob);
             reader.onloadend = () => {
-                const base64Video = reader.result;
-                conexoesAtivas.forEach(conn => {
-                    conn.send({ tipo: 'video_file', valor: base64Video, hora: new Date().toLocaleTimeString() });
+                Object.values(conexoes).forEach(c => {
+                    c.send({ tipo: 'arquivo', data: reader.result, de: peer.id });
                 });
             };
         }
 
-        // --- LÓGICA MONITOR ---
-        function iniciarModoMonitor() {
+        // --- LÓGICA DO APARELHO QUE É MONITOR ---
+        function modoMonitor() {
             document.getElementById('menu-inicial').style.display = 'none';
             document.getElementById('tela-monitor').style.display = 'block';
             peer = new Peer();
+            
             peer.on('call', call => {
                 call.answer();
-                document.getElementById('alerta-live').style.display = 'block';
-                call.on('stream', st => document.getElementById('remote-video').srcObject = st);
+                const wrapper = document.getElementById('video-' + call.peer);
+                if (wrapper) {
+                    wrapper.style.display = 'block';
+                    const vid = wrapper.querySelector('video');
+                    call.on('stream', st => vid.srcObject = st);
+                }
             });
         }
 
-        function conectarMonitor() {
-            const targetId = document.getElementById('id-camera').value;
-            const conn = peer.connect(targetId);
+        function conectarNovaCamera() {
+            const idCam = document.getElementById('id-nova-camera').value;
+            if (!idCam || conexoes[idCam]) return;
+
+            const conn = peer.connect(idCam);
             conn.on('open', () => {
-                document.getElementById('status').innerText = "Conectado à Câmera!";
-                conn.on('data', data => {
-                    if (data.tipo === 'comando' && data.valor === 'fechar_video') {
-                        document.getElementById('alerta-live').style.display = 'none';
+                conexoes[idCam] = conn;
+                document.getElementById('id-nova-camera').value = "";
+                
+                // Cria o card da câmera na tela
+                const div = document.createElement('div');
+                div.id = 'card-' + idCam;
+                div.className = 'camera-card';
+                div.innerHTML = `
+                    <span class="cam-name">📍 Câmera: ${idCam}</span> - <span id="st-${idCam}">Protegido</span>
+                    <div id="video-${idCam}" class="video-wrapper"><video autoplay playsinline></video></div>
+                `;
+                document.getElementById('lista-cameras').appendChild(div);
+
+                conn.on('data', msg => {
+                    const card = document.getElementById('card-' + idCam);
+                    const statusTxt = document.getElementById('st-' + idCam);
+                    const wrapper = document.getElementById('video-' + idCam);
+
+                    if (msg.tipo === 'alerta') {
+                        if (msg.estado === 'on') {
+                            card.classList.add('alert');
+                            statusTxt.innerText = "⚠️ INVASÃO DETECTADA!";
+                        } else {
+                            card.classList.remove('alert');
+                            statusTxt.innerText = "Protegido";
+                            wrapper.style.display = 'none';
+                        }
                     }
-                    if (data.tipo === 'video_file') {
-                        // Recebeu a prova gravada!
-                        adicionarNaGaleria('galeria-monitor', data.valor, data.hora);
+                    if (msg.tipo === 'arquivo') {
+                        adicionarProva(msg.data, msg.de);
                     }
                 });
             });
         }
 
-        function adicionarNaGaleria(containerId, url, hora = "") {
-            const galeria = document.getElementById(containerId);
-            const tempo = hora || new Date().toLocaleTimeString();
-            const div = document.createElement('div');
-            div.className = 'card-video';
-            div.innerHTML = `
+        function adicionarProva(url, nome) {
+            const item = document.createElement('div');
+            item.className = 'prova-item';
+            item.innerHTML = `
                 <video src="${url}" controls></video>
-                <p style="font-size:10px; margin:5px 0;">Alerta: ${tempo}</p>
-                <a href="${url}" download="prova_${Date.now()}.webm" class="btn-download">BAIXAR PROVA</a>
+                <b>Origem: ${nome}</b><br>${new Date().toLocaleTimeString()}
+                <a href="${url}" download="prova_${nome}.webm" class="btn-dl">BAIXAR</a>
             `;
-            galeria.prepend(div);
+            document.getElementById('galeria-provas').prepend(item);
         }
     </script>
 </body>
