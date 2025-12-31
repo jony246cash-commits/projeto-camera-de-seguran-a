@@ -1,52 +1,94 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Câmera de Segurança IA</title>
+<script>
+let model, webcam, statusEl, galeriaEl;
+const status = document.getElementById('status');
+const video = document.getElementById('webcam');
+const galeria = document.getElementById('galeria');
+
+async function init() {
+    status.textContent = 'Carregando modelo...';
+    try {
+        model = await cocoSsd.load(); // pode usar 'lite_mobilenet_v2' para mais rápido
+        status.textContent = 'Acessando câmera...';
+        
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'environment' }, // câmera traseira no celular
+            audio: false
+        });
+        video.srcObject = stream;
+        
+        status.textContent = 'Online';
+        status.classList.add('online');
+        
+        detectFrame(); // inicia loop de detecção
+    } catch (e) {
+        status.textContent = 'Erro: ' + e.message;
+        status.classList.add('alert');
+        console.error(e);
+    }
+}
+
+async function detectFrame() {
+    if (!model) return;
     
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    const predictions = await model.detect(video);
+    
+    // Exemplo: se detectar pessoa, captura foto
+    const pessoa = predictions.find(p => p.class === 'person' && p.score > 0.6);
+    if (pessoa) {
+        capturarFoto();
+        status.textContent = 'ALERTA: Pessoa detectada!';
+        status.classList.add('alert');
+        setTimeout(() => {
+            status.classList.remove('alert');
+            status.textContent = 'Online';
+        }, 3000);
+    }
+    
+    requestAnimationFrame(detectFrame); // loop contínuo ~30fps
+}
 
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #000; color: white; overflow-x: hidden; }
-        .header { background: #1a1a1a; padding: 15px; text-align: center; border-bottom: 2px solid #333; }
-        
-        #video-container { position: relative; width: 100%; max-width: 640px; margin: 10px auto; border-radius: 10px; overflow: hidden; }
-        video { width: 100%; display: block; background: #222; }
-        
-        .status-bar { padding: 10px; text-align: center; font-weight: bold; transition: 0.3s; }
-        .online { color: #4CAF50; }
-        .alert { color: #ff4444; background: rgba(255, 68, 68, 0.2); animation: blink 1s infinite; }
+function capturarFoto() {
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    
+    const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+    const timestamp = new Date().toLocaleString();
+    
+    // Salva no localStorage (máx ~5-10MB por domínio)
+    let fotos = JSON.parse(localStorage.getItem('fotosSeguranca') || '[]');
+    fotos.unshift({dataURL, timestamp}); // mais nova primeiro
+    if (fotos.length > 50) fotos.pop(); // limita quantidade
+    localStorage.setItem('fotosSeguranca', JSON.stringify(fotos));
+    
+    carregarGaleria();
+}
 
-        .controls { display: flex; justify-content: space-around; padding: 20px; }
-        button { padding: 12px 20px; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .btn-gallery { background: #2196F3; color: white; }
-        .btn-clear { background: #555; color: white; }
+function carregarGaleria() {
+    galeria.innerHTML = '';
+    const fotos = JSON.parse(localStorage.getItem('fotosSeguranca') || '[]');
+    fotos.forEach(foto => {
+        const card = document.createElement('div');
+        card.className = 'card-foto';
+        card.innerHTML = `
+            <img src="${foto.dataURL}">
+            <div>${foto.timestamp}</div>
+        `;
+        galeria.appendChild(card);
+    });
+}
 
-        #galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; padding: 10px; }
-        .card-foto { background: #1a1a1a; border-radius: 8px; overflow: hidden; border: 1px solid #333; }
-        .card-foto img { width: 100%; height: auto; display: block; }
-        .card-foto div { font-size: 10px; padding: 5px; text-align: center; color: #aaa; }
+function limparMemoria() {
+    if (confirm('Tem certeza que quer apagar todas as fotos?')) {
+        localStorage.removeItem('fotosSeguranca');
+        carregarGaleria();
+    }
+}
 
-        @keyframes blink { 50% { opacity: 0.5; } }
-    </style>
-</head>
-<body>
-
-    <div class="header">
-        <h2 style="margin:0">OBSERVADOR IA</h2>
-    </div>
-
-    <div id="status" class="status-bar">Iniciando sistema...</div>
-
-    <div id="video-container">
-        <video id="webcam" autoplay muted playsinline></video>
-    </div>
-
-    <div class="controls">
-        <button class="btn-gallery" onclick="carregarGaleria()">Ver Galeria</button>
-        <button class="btn-clear" onclick="limparMemoria()">Limpar Tudo</button>
-    </div>
-
-    <div id="galeria"></div>
+// Inicia tudo quando página carrega
+window.onload = () => {
+    init();
+    carregarGaleria();
+};
+</script>
