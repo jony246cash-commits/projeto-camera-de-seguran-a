@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Guard Pro - Prova de Invasão</title>
+    <title>Smart Guard Pro - Download Remoto</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
@@ -16,43 +16,49 @@
         @keyframes blink { 50% { opacity: 0.6; } }
         
         #video-display { width: 100%; max-width: 600px; margin: auto; background: #000; }
-        video { width: 100%; height: auto; }
+        video { width: 100%; height: auto; border-radius: 8px; }
         
         .painel { padding: 30px 20px; }
-        button { width: 85%; max-width: 300px; padding: 20px; margin: 10px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        button { width: 85%; max-width: 300px; padding: 20px; margin: 10px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.3s; }
         .btn-cam { background: #059669; color: white; }
         .btn-mon { background: #2563eb; color: white; }
         
-        #galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; padding: 20px; }
-        .card-video { background: #222; padding: 5px; border-radius: 5px; border: 1px solid #444; }
-        .card-video video { width: 100%; }
+        .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; padding: 20px; }
+        .card-video { background: #222; padding: 10px; border-radius: 8px; border: 1px solid #444; text-align: center; }
+        .card-video video { width: 100%; margin-bottom: 8px; }
+        .btn-download { color: #22d3ee; text-decoration: none; font-size: 12px; font-weight: bold; border: 1px solid #22d3ee; padding: 5px; border-radius: 4px; display: inline-block; }
     </style>
 </head>
 <body>
 
-    <div id="status" class="status-badge">🟡 Carregando Inteligência...</div>
+    <div id="status" class="status-badge">✅ Sistema Pronto</div>
 
     <div id="menu-inicial" class="painel">
         <h1>🛡️ Smart Guard</h1>
-        <p>Sistema de Vigilância com Gravação de Provas</p>
-        <button id="btnCam" class="btn-cam">MODO CÂMERA (Capturar Invasor)</button>
-        <button id="btnMon" class="btn-mon">MODO MONITOR (Ver ao Vivo)</button>
+        <p>Vigilância Inteligente com Provas Remotas</p>
+        <button id="btnCam" class="btn-cam">MODO CÂMERA</button>
+        <button id="btnMon" class="btn-mon">MODO MONITOR</button>
     </div>
 
     <div id="tela-camera" style="display:none;">
         <div id="video-display">
             <video id="webcam" autoplay muted playsinline></video>
         </div>
-        <div id="galeria"></div>
+        <h4>Minhas Gravações (Locais)</h4>
+        <div id="galeria-camera" class="galeria"></div>
     </div>
 
     <div id="tela-monitor" style="display:none; padding: 20px;">
-        <div id="alerta-live" style="display:none; border: 5px solid #ef4444; margin-bottom: 20px;">
-            <h2 style="background:#ef4444; margin:0; padding:10px;">🔴 INVASOR AO VIVO</h2>
+        <div id="alerta-live" style="display:none; border: 4px solid #ef4444; margin-bottom: 20px; border-radius: 12px; overflow: hidden;">
+            <h3 style="background:#ef4444; margin:0; padding:10px;">🔴 AO VIVO: INVASOR</h3>
             <video id="remote-video" autoplay playsinline></video>
         </div>
-        <input type="text" id="id-camera" placeholder="Digite o ID da Câmera" style="padding:15px; width:80%; border-radius:8px;">
-        <button id="btnConectar" class="btn-mon" style="margin-top:15px;">CONECTAR À CÂMERA</button>
+        <input type="text" id="id-camera" placeholder="Digite o ID da Câmera" style="padding:15px; width:80%; border-radius:8px; border:1px solid #444; background:#111; color:white;">
+        <button id="btnConectar" class="btn-mon" style="margin-top:15px;">CONECTAR</button>
+        
+        <hr style="border: 0; border-top: 1px solid #333; margin: 30px 0;">
+        <h4>Vídeos Recebidos (Provas Remotas)</h4>
+        <div id="galeria-monitor" class="galeria"></div>
     </div>
 
     <script>
@@ -62,109 +68,91 @@
         let conexoesAtivas = [];
 
         window.onload = () => {
-            document.getElementById('status').innerText = "✅ Sistema Pronto";
             document.getElementById('btnCam').onclick = iniciarModoCamera;
             document.getElementById('btnMon').onclick = iniciarModoMonitor;
             document.getElementById('btnConectar').onclick = conectarMonitor;
         };
 
+        // --- LÓGICA CÂMERA ---
         async function iniciarModoCamera() {
-            const id = prompt("Crie um ID para esta câmera (ex: casa1):");
+            const id = prompt("Crie um ID para esta câmera:");
             if (!id) return;
-
             try {
-                // 1. Acessa Câmera
                 localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
                 document.getElementById('webcam').srcObject = localStream;
                 document.getElementById('menu-inicial').style.display = 'none';
                 document.getElementById('tela-camera').style.display = 'block';
 
-                // 2. Inicia Peer para transmissão
                 peer = new Peer(id);
-                peer.on('open', () => document.getElementById('status').innerText = "CÂMERA ATIVA: " + id);
+                peer.on('open', () => document.getElementById('status').innerText = "ONLINE: " + id);
                 peer.on('connection', conn => conexoesAtivas.push(conn));
 
-                // 3. Carrega IA Leve para Mobile
-                document.getElementById('status').innerText = "⚙️ Ativando IA...";
+                document.getElementById('status').innerText = "⚙️ Carregando IA...";
                 model = await cocoSsd.load({ base: 'mobilenet_v1' });
-                document.getElementById('status').innerText = "🛡️ Monitoramento em Tempo Real";
-                
+                document.getElementById('status').innerText = "🛡️ Proteção Ativa";
                 loopDeteccao();
-            } catch (e) {
-                alert("Erro: " + e.message);
-            }
+            } catch (e) { alert("Erro Câmera: " + e.message); }
         }
 
         async function loopDeteccao() {
-            if (!model) return;
             const predictions = await model.detect(document.getElementById('webcam'));
             const invasor = predictions.some(p => p.class === 'person' && p.score > 0.6);
 
             if (invasor) {
                 document.getElementById('status').innerText = "⚠️ INVASOR DETECTADO!";
                 document.getElementById('status').classList.add('modo-alerta');
-                
-                if (!gravando) {
-                    começarGravacaoETransmissao();
-                }
+                if (!gravando) iniciarGravacao();
             } else {
-                if (gravando) {
-                    pararGravacaoETransmissao();
-                }
+                if (gravando) pararGravacao();
                 document.getElementById('status').classList.remove('modo-alerta');
-                document.getElementById('status').innerText = "Ambiente Seguro";
+                document.getElementById('status').innerText = "Monitorando...";
             }
             requestAnimationFrame(loopDeteccao);
         }
 
-        function começarGravacaoETransmissao() {
+        function iniciarGravacao() {
             gravando = true;
             chunks = [];
-            
-            // GRAVAÇÃO (PROVA)
             mediaRecorder = new MediaRecorder(localStream, { mimeType: 'video/webm' });
             mediaRecorder.ondataavailable = e => chunks.push(e.data);
-            mediaRecorder.onstop = salvarVideoNaGaleria;
+            mediaRecorder.onstop = processarVideoFinal;
             mediaRecorder.start();
-
-            // TRANSMISSÃO AO VIVO (MONITOR)
-            conexoesAtivas.forEach(conn => {
-                peer.call(conn.peer, localStream);
-            });
+            conexoesAtivas.forEach(conn => peer.call(conn.peer, localStream));
         }
 
-        function pararGravacaoETransmissao() {
+        function pararGravacao() {
             gravando = false;
             if (mediaRecorder) mediaRecorder.stop();
-            conexoesAtivas.forEach(conn => conn.send('fechar_video'));
+            conexoesAtivas.forEach(conn => conn.send({ tipo: 'comando', valor: 'fechar_video' }));
         }
 
-        function salvarVideoNaGaleria() {
+        function processarVideoFinal() {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const url = URL.createObjectURL(blob);
-            const galeria = document.getElementById('galeria');
             
-            const div = document.createElement('div');
-            div.className = 'card-video';
-            div.innerHTML = `
-                <video src="${url}" controls></video>
-                <a href="${url}" download="prova_${Date.now()}.webm" style="color:cyan; font-size:10px;">BAIXAR PROVA</a>
-            `;
-            galeria.prepend(div);
+            // 1. Mostrar na galeria local (Câmera)
+            adicionarNaGaleria('galeria-camera', url);
+
+            // 2. Enviar arquivo para o Monitor
+            const reader = new FileReader();
+            reader.readAsDataURL(blob); 
+            reader.onloadend = () => {
+                const base64Video = reader.result;
+                conexoesAtivas.forEach(conn => {
+                    conn.send({ tipo: 'video_file', valor: base64Video, hora: new Date().toLocaleTimeString() });
+                });
+            };
         }
 
-        // --- LÓGICA DO MONITOR ---
+        // --- LÓGICA MONITOR ---
         function iniciarModoMonitor() {
             document.getElementById('menu-inicial').style.display = 'none';
             document.getElementById('tela-monitor').style.display = 'block';
             peer = new Peer();
-            
             peer.on('call', call => {
                 call.answer();
                 document.getElementById('alerta-live').style.display = 'block';
-                call.on('stream', st => {
-                    document.getElementById('remote-video').srcObject = st;
-                });
+                call.on('stream', st => document.getElementById('remote-video').srcObject = st);
             });
         }
 
@@ -172,11 +160,30 @@
             const targetId = document.getElementById('id-camera').value;
             const conn = peer.connect(targetId);
             conn.on('open', () => {
-                alert("Monitor Conectado à Câmera!");
+                document.getElementById('status').innerText = "Conectado à Câmera!";
                 conn.on('data', data => {
-                    if (data === 'fechar_video') document.getElementById('alerta-live').style.display = 'none';
+                    if (data.tipo === 'comando' && data.valor === 'fechar_video') {
+                        document.getElementById('alerta-live').style.display = 'none';
+                    }
+                    if (data.tipo === 'video_file') {
+                        // Recebeu a prova gravada!
+                        adicionarNaGaleria('galeria-monitor', data.valor, data.hora);
+                    }
                 });
             });
+        }
+
+        function adicionarNaGaleria(containerId, url, hora = "") {
+            const galeria = document.getElementById(containerId);
+            const tempo = hora || new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.className = 'card-video';
+            div.innerHTML = `
+                <video src="${url}" controls></video>
+                <p style="font-size:10px; margin:5px 0;">Alerta: ${tempo}</p>
+                <a href="${url}" download="prova_${Date.now()}.webm" class="btn-download">BAIXAR PROVA</a>
+            `;
+            galeria.prepend(div);
         }
     </script>
 </body>
