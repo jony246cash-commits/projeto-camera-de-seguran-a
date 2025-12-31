@@ -3,50 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Guard - Câmera de Segurança</title>
+    <title>Smart Guard AI - Live Video & Record</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <script src="https://unpkg.com/peerjs@1.3.1/dist/peerjs.min.js"></script>
 
     <style>
-        body { font-family: sans-serif; margin: 0; background: #121212; color: white; text-align: center; }
-        #video-container { position: relative; width: 100%; max-width: 640px; margin: auto; background: #000; }
-        video { width: 100%; border-bottom: 3px solid #4CAF50; }
-        
-        .controls { padding: 15px; display: flex; justify-content: center; gap: 10px; background: #1e1e1e; }
-        button { padding: 10px 15px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
-        .btn-main { background: #4CAF50; color: white; }
-        .btn-danger { background: #f44336; color: white; }
-        
-        #galeria, #galeria-monitor { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); 
-            gap: 15px; padding: 15px; 
-        }
-        .card-foto { background: #333; border-radius: 8px; overflow: hidden; font-size: 11px; padding-bottom: 5px; }
-        .card-foto img { width: 100%; display: block; margin-bottom: 5px; }
-        
-        .status-badge { padding: 10px; font-size: 14px; background: #333; margin-bottom: 10px; }
-        .detected { background: #ff4444; animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.5; } }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #0f0f0f; color: white; text-align: center; }
+        .status-badge { padding: 12px; font-size: 14px; background: #222; border-bottom: 2px solid #444; sticky: top; z-index: 100; }
+        .detected { background: #b91c1c; animation: blink 1s infinite; font-weight: bold; }
+        @keyframes blink { 50% { opacity: 0.7; } }
 
-        #modo-selecao { padding: 50px 20px; }
-        #modo-selecao button { margin: 10px; width: 80%; max-width: 300px; font-size: 1.1em; }
+        #video-container { position: relative; width: 100%; max-width: 640px; margin: 10px auto; background: #000; border-radius: 8px; overflow: hidden; }
+        video { width: 100%; display: block; }
         
+        #monitor-ao-vivo { display: none; background: #1a1a1a; padding: 10px; border: 2px solid #b91c1c; margin: 10px; border-radius: 8px; }
+        
+        .controls { padding: 15px; display: flex; justify-content: center; gap: 10px; }
+        button { padding: 12px 20px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-main { background: #059669; color: white; }
+        .btn-danger { background: #dc2626; color: white; }
+        button:hover { opacity: 0.8; transform: scale(1.05); }
+
+        .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; padding: 20px; }
+        .card-item { background: #262626; border-radius: 8px; overflow: hidden; font-size: 12px; border: 1px solid #444; }
+        .card-item video, .card-item img { width: 100%; height: auto; }
+
+        #modo-selecao { padding: 60px 20px; }
         #config-monitor { display: none; padding: 20px; }
-        #config-monitor input { padding: 12px; border-radius: 5px; border: none; width: 250px; margin-bottom: 10px; }
+        input { padding: 12px; border-radius: 6px; border: 1px solid #444; background: #1f2937; color: white; width: 260px; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-    <div id="status" class="status-badge">Aguardando Escolha de Modo...</div>
+    <div id="status" class="status-badge">Aguardando Inicialização...</div>
 
     <div id="modo-selecao">
-        <h2>Smart Guard AI</h2>
-        <p>Selecione como deseja usar este dispositivo:</p>
-        <button class="btn-main" onclick="iniciarModoCamera()">MODO CÂMERA (Captura)</button><br>
-        <button class="btn-main" onclick="iniciarModoMonitor()">MODO MONITOR (Ver Alertas)</button>
+        <h1>🛡️ Smart Guard Pro</h1>
+        <p>Transforme seu dispositivo em uma sentinela inteligente.</p>
+        <button class="btn-main" onclick="iniciarModoCamera()">MODO CÂMERA</button>
+        <button class="btn-main" onclick="iniciarModoMonitor()">MODO MONITOR</button>
     </div>
 
     <div id="app-camera" style="display: none;">
@@ -54,191 +51,72 @@
             <video id="webcam" autoplay muted playsinline></video>
         </div>
         <div class="controls">
-            <button class="btn-main" onclick="carregarFotos()">Ver Galeria Local</button>
-            <button class="btn-danger" onclick="limparTudo()">Limpar Tudo</button>
+            <button class="btn-main" onclick="carregarGaleria()">Ver Gravações</button>
+            <button class="btn-danger" onclick="limparBanco()">Limpar Memória</button>
         </div>
-        <div id="galeria"></div>
+        <div id="galeria-local" class="galeria"></div>
     </div>
 
     <div id="config-monitor">
-        <h3>Painel de Monitoramento</h3>
-        <input type="text" id="camera-id-input" placeholder="Digite o ID da Câmera">
+        <div id="monitor-ao-vivo">
+            <h3 style="color: #ef4444; margin-top: 0;">🔴 ALERTA: MOVIMENTO AO VIVO</h3>
+            <video id="remote-video" autoplay playsinline></video>
+        </div>
+        
+        <h3>Painel de Controle</h3>
+        <input type="text" id="camera-id-input" placeholder="Digite o ID da Câmera Remota">
         <button class="btn-main" onclick="conectarCamera()">CONECTAR À CÂMERA</button>
-        <div id="cameras-conectadas" style="margin: 15px 0; color: #4CAF50;"></div>
-        <hr>
-        <h4>Alertas em Tempo Real</h4>
-        <div id="galeria-monitor"></div>
+        <div id="info-conexao" style="margin-top: 15px; color: #10b981;"></div>
+        <hr style="border-color: #333; margin: 20px 0;">
+        <h4>Histórico de Alertas</h4>
+        <div id="galeria-monitor" class="galeria"></div>
     </div>
 
     <script>
-        const video = document.getElementById('webcam');
-        const statusDisplay = document.getElementById('status');
-        const DB_NAME = "SecurityDB";
-        const MAX_FOTOS = 50;
-        let db, model, peer;
-        let ultimaCaptura = 0;
-        let conexoesAtivas = []; 
-        let modoAtual = null;
+        const videoLocal = document.getElementById('webcam');
+        const statusMsg = document.getElementById('status');
+        let db, model, peer, mediaRecorder;
+        let chunks = [];
+        let gravando = false;
+        let conexoesMonitores = [];
+        let chamadasAtivas = [];
 
-        // 1. Inicializar Banco de Dados Local
-        const request = indexedDB.open(DB_NAME, 1);
+        // --- INICIALIZAÇÃO DB ---
+        const request = indexedDB.open("SmartGuardDB", 1);
         request.onupgradeneeded = e => {
-            e.target.result.createObjectStore("invasores", { keyPath: "id", autoIncrement: true });
+            e.target.result.createObjectStore("midia", { keyPath: "id", autoIncrement: true });
         };
         request.onsuccess = e => { db = e.target.result; };
 
         // --- MODO CÂMERA ---
         async function iniciarModoCamera() {
-            const cameraId = prompt('Crie um ID para esta câmera (ex: camera_sala):');
-            if (!cameraId) return;
+            const cid = prompt("Crie um ID para esta câmera:");
+            if (!cid) return;
 
-            modoAtual = 'camera';
             document.getElementById('modo-selecao').style.display = 'none';
             document.getElementById('app-camera').style.display = 'block';
 
-            // Usando servidor padrão do PeerJS (mais confiável)
-            peer = new Peer(cameraId);
-
+            peer = new Peer(cid);
             peer.on('open', id => {
-                statusDisplay.innerText = `ON-LINE | ID DA CÂMERA: ${id}`;
-                statusDisplay.style.color = "#4CAF50";
+                statusMsg.innerText = `CÂMERA ATIVA | ID: ${id}`;
+                statusMsg.style.color = "#10b981";
             });
 
             peer.on('connection', conn => {
-                conexoesAtivas.push(conn);
-                statusDisplay.innerText = `Câmera Ativa | Monitores conectados: ${conexoesAtivas.length}`;
-                
-                conn.on('close', () => {
-                    conexoesAtivas = conexoesAtivas.filter(c => c.peer !== conn.peer);
-                    statusDisplay.innerText = `Câmera Ativa | Monitores conectados: ${conexoesAtivas.length}`;
-                });
+                conexoesMonitores.push(conn);
+                statusMsg.innerText = `Câmera Online | Monitores: ${conexoesMonitores.length}`;
             });
 
-            setupIA();
+            await iniciarIA();
         }
 
-        async function setupIA() {
+        async function iniciarIA() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-                video.srcObject = stream;
-                
-                statusDisplay.innerText = "Carregando Inteligência Artificial...";
+                videoLocal.srcObject = stream;
+                statusMsg.innerText = "Carregando Inteligência Artificial...";
                 model = await cocoSsd.load();
-                statusDisplay.innerText = "Monitoramento Ativo e Protegido";
-                
-                detectarLoop();
+                statusMsg.innerText = "Proteção Ativa - Monitorando Ambiente";
+                loopDeteccao();
             } catch (err) {
-                statusDisplay.innerText = "Erro na Câmera: " + err;
-            }
-        }
-
-        async function detectarLoop() {
-            if (model) {
-                const predictions = await model.detect(video);
-                let pessoaEncontrada = predictions.some(p => p.class === 'person' && p.score > 0.6);
-
-                if (pessoaEncontrada) {
-                    statusDisplay.classList.add('detected');
-                    statusDisplay.innerText = "!!! MOVIMENTO DETECTADO !!!";
-                    
-                    const agora = Date.now();
-                    if (agora - ultimaCaptura > 5000) { // Intervalo de 5 segundos
-                        tirarESalvarFoto();
-                        ultimaCaptura = agora;
-                    }
-                } else {
-                    statusDisplay.classList.remove('detected');
-                    statusDisplay.innerText = "Ambiente Seguro - Monitorando...";
-                }
-            }
-            requestAnimationFrame(detectarLoop);
-        }
-
-        function tirarESalvarFoto() {
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth / 2;
-            canvas.height = video.videoHeight / 2;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            const dataURL = canvas.toDataURL('image/jpeg', 0.5);
-            const timestamp = new Date().toLocaleString();
-
-            // Salvar no banco local (IndexedDB)
-            const transaction = db.transaction(["invasores"], "readwrite");
-            transaction.objectStore("invasores").add({ data: timestamp, foto: dataURL });
-
-            // Enviar para os monitores via PeerJS
-            conexoesAtivas.forEach(conn => {
-                if (conn.open) {
-                    conn.send({ foto: dataURL, data: timestamp, idOrigem: peer.id });
-                }
-            });
-        }
-
-        // --- MODO MONITOR ---
-        function iniciarModoMonitor() {
-            modoAtual = 'monitor';
-            document.getElementById('modo-selecao').style.display = 'none';
-            document.getElementById('config-monitor').style.display = 'block';
-
-            peer = new Peer(); // ID automático para o monitor
-
-            peer.on('open', id => {
-                statusDisplay.innerText = `MONITOR ATIVO | Seu ID: ${id}`;
-            });
-        }
-
-        function conectarCamera() {
-            const targetId = document.getElementById('camera-id-input').value;
-            if (!targetId) return alert("Digite o ID da câmera!");
-
-            statusDisplay.innerText = `Tentando conectar a: ${targetId}...`;
-            
-            const conn = peer.connect(targetId);
-
-            conn.on('open', () => {
-                statusDisplay.innerText = `CONECTADO À CÂMERA: ${targetId}`;
-                document.getElementById('cameras-conectadas').innerText = `Monitorando: ${targetId}`;
-                
-                conn.on('data', data => {
-                    const galeria = document.getElementById('galeria-monitor');
-                    const div = document.createElement('div');
-                    div.className = 'card-foto';
-                    div.innerHTML = `<img src="${data.foto}"><b>${data.data}</b><br>ID: ${data.idOrigem}`;
-                    galeria.prepend(div); // Adiciona a foto mais recente no topo
-                });
-            });
-
-            conn.on('error', err => {
-                alert("Erro ao conectar: Verifique se o ID da câmera está correto e se ela está aberta.");
-                statusDisplay.innerText = "Erro na conexão.";
-            });
-        }
-
-        // Funções de Galeria Local
-        function carregarFotos() {
-            const galeria = document.getElementById('galeria');
-            galeria.innerHTML = "";
-            const store = db.transaction("invasores").objectStore("invasores");
-            store.openCursor(null, "prev").onsuccess = e => {
-                const cursor = e.target.result;
-                if (cursor) {
-                    const div = document.createElement('div');
-                    div.className = 'card-foto';
-                    div.innerHTML = `<img src="${cursor.value.foto}"><span>${cursor.value.data}</span>`;
-                    galeria.appendChild(div);
-                    cursor.continue();
-                }
-            };
-        }
-
-        function limparTudo() {
-            if(confirm("Deseja apagar o histórico de fotos?")) {
-                db.transaction("invasores", "readwrite").objectStore("invasores").clear();
-                document.getElementById('galeria').innerHTML = "";
-            }
-        }
-    </script>
-</body>
-</html>
+                statusMsg.innerText = "Erro no hardware: " +
