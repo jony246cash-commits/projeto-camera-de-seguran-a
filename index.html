@@ -3,144 +3,180 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Guard Pro</title>
+    <title>Smart Guard Pro - Prova de Invasão</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
 
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #000; color: #fff; text-align: center; overscroll-behavior: none; }
-        .status-badge { padding: 15px; background: #1a1a1a; font-size: 14px; border-bottom: 1px solid #333; }
-        #video-container { width: 100%; max-width: 640px; margin: auto; background: #000; }
-        video { width: 100%; height: auto; border-radius: 0 0 10px 10px; }
-        .menu { padding: 40px 20px; }
-        button { width: 80%; max-width: 300px; padding: 18px; margin: 10px; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; }
+        body { font-family: sans-serif; margin: 0; background: #000; color: #fff; text-align: center; }
+        .status-badge { padding: 15px; background: #1a1a1a; font-size: 14px; border-bottom: 2px solid #333; }
+        .modo-alerta { background: #b91c1c !important; font-weight: bold; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.6; } }
+        
+        #video-display { width: 100%; max-width: 600px; margin: auto; background: #000; }
+        video { width: 100%; height: auto; }
+        
+        .painel { padding: 30px 20px; }
+        button { width: 85%; max-width: 300px; padding: 20px; margin: 10px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px; }
         .btn-cam { background: #059669; color: white; }
         .btn-mon { background: #2563eb; color: white; }
-        #app-camera, #app-monitor { display: none; }
-        .alerta { background: #ef4444 !important; animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.5; } }
+        
+        #galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; padding: 20px; }
+        .card-video { background: #222; padding: 5px; border-radius: 5px; border: 1px solid #444; }
+        .card-video video { width: 100%; }
     </style>
 </head>
 <body>
 
-    <div id="status" class="status-badge">Carregando Sistema...</div>
+    <div id="status" class="status-badge">🟡 Carregando Inteligência...</div>
 
-    <div id="menu-inicial" class="menu">
+    <div id="menu-inicial" class="painel">
         <h1>🛡️ Smart Guard</h1>
-        <p>Aguarde o status ficar "Pronto" antes de clicar.</p>
-        <button id="btnIniciarCamera" class="btn-cam">MODO CÂMERA</button>
-        <button id="btnIniciarMonitor" class="btn-mon">MODO MONITOR</button>
+        <p>Sistema de Vigilância com Gravação de Provas</p>
+        <button id="btnCam" class="btn-cam">MODO CÂMERA (Capturar Invasor)</button>
+        <button id="btnMon" class="btn-mon">MODO MONITOR (Ver ao Vivo)</button>
     </div>
 
-    <div id="app-camera">
-        <div id="video-container">
+    <div id="tela-camera" style="display:none;">
+        <div id="video-display">
             <video id="webcam" autoplay muted playsinline></video>
         </div>
-        <p>Sua câmera está ativa e protegendo o local.</p>
+        <div id="galeria"></div>
     </div>
 
-    <div id="app-monitor" style="padding: 20px;">
-        <div id="alerta-video" style="display:none;">
-            <h2 class="alerta" style="padding:10px; border-radius:8px;">🔴 MOVIMENTO DETECTADO</h2>
-            <video id="remote-video" autoplay playsinline style="width:100%;"></video>
+    <div id="tela-monitor" style="display:none; padding: 20px;">
+        <div id="alerta-live" style="display:none; border: 5px solid #ef4444; margin-bottom: 20px;">
+            <h2 style="background:#ef4444; margin:0; padding:10px;">🔴 INVASOR AO VIVO</h2>
+            <video id="remote-video" autoplay playsinline></video>
         </div>
-        <input type="text" id="id-destino" placeholder="ID da Câmera" style="padding:15px; width:80%; border-radius:8px; margin-bottom:10px;">
-        <button id="btnConectar" class="btn-mon">CONECTAR AGORA</button>
+        <input type="text" id="id-camera" placeholder="Digite o ID da Câmera" style="padding:15px; width:80%; border-radius:8px;">
+        <button id="btnConectar" class="btn-mon" style="margin-top:15px;">CONECTAR À CÂMERA</button>
     </div>
 
     <script>
         let model, peer, localStream, mediaRecorder;
-        let conexoes = [];
+        let chunks = [];
+        let gravando = false;
+        let conexoesAtivas = [];
 
-        // Inicialização Segura
-        window.addEventListener('load', () => {
+        window.onload = () => {
             document.getElementById('status').innerText = "✅ Sistema Pronto";
-            
-            // Configura os botões via código (evita erro de 'not defined')
-            document.getElementById('btnIniciarCamera').addEventListener('click', iniciarCamera);
-            document.getElementById('btnIniciarMonitor').addEventListener('click', iniciarMonitor);
-            document.getElementById('btnConectar').addEventListener('click', conectarAoPeer);
-        });
+            document.getElementById('btnCam').onclick = iniciarModoCamera;
+            document.getElementById('btnMon').onclick = iniciarModoMonitor;
+            document.getElementById('btnConectar').onclick = conectarMonitor;
+        };
 
-        async function iniciarCamera() {
-            const id = prompt("Defina um ID para esta câmera:");
+        async function iniciarModoCamera() {
+            const id = prompt("Crie um ID para esta câmera (ex: casa1):");
             if (!id) return;
 
             try {
-                document.getElementById('status').innerText = "Acessando Câmera...";
-                localStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment" }, 
-                    audio: false 
-                });
-                
+                // 1. Acessa Câmera
+                localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
                 document.getElementById('webcam').srcObject = localStream;
                 document.getElementById('menu-inicial').style.display = 'none';
-                document.getElementById('app-camera').style.display = 'block';
+                document.getElementById('tela-camera').style.display = 'block';
 
+                // 2. Inicia Peer para transmissão
                 peer = new Peer(id);
-                peer.on('open', () => {
-                    document.getElementById('status').innerText = "Câmera Online: " + id;
-                });
+                peer.on('open', () => document.getElementById('status').innerText = "CÂMERA ATIVA: " + id);
+                peer.on('connection', conn => conexoesAtivas.push(conn));
 
-                peer.on('connection', conn => {
-                    conexoes.push(conn);
-                    document.getElementById('status').innerText = "Conectado ao Monitor";
-                });
-
-                // Iniciar IA de forma leve
+                // 3. Carrega IA Leve para Mobile
+                document.getElementById('status').innerText = "⚙️ Ativando IA...";
                 model = await cocoSsd.load({ base: 'mobilenet_v1' });
-                detectar();
+                document.getElementById('status').innerText = "🛡️ Monitoramento em Tempo Real";
+                
+                loopDeteccao();
             } catch (e) {
-                alert("Erro: Use HTTPS e autorize a câmera. " + e.message);
+                alert("Erro: " + e.message);
             }
         }
 
-        function iniciarMonitor() {
+        async function loopDeteccao() {
+            if (!model) return;
+            const predictions = await model.detect(document.getElementById('webcam'));
+            const invasor = predictions.some(p => p.class === 'person' && p.score > 0.6);
+
+            if (invasor) {
+                document.getElementById('status').innerText = "⚠️ INVASOR DETECTADO!";
+                document.getElementById('status').classList.add('modo-alerta');
+                
+                if (!gravando) {
+                    começarGravacaoETransmissao();
+                }
+            } else {
+                if (gravando) {
+                    pararGravacaoETransmissao();
+                }
+                document.getElementById('status').classList.remove('modo-alerta');
+                document.getElementById('status').innerText = "Ambiente Seguro";
+            }
+            requestAnimationFrame(loopDeteccao);
+        }
+
+        function começarGravacaoETransmissao() {
+            gravando = true;
+            chunks = [];
+            
+            // GRAVAÇÃO (PROVA)
+            mediaRecorder = new MediaRecorder(localStream, { mimeType: 'video/webm' });
+            mediaRecorder.ondataavailable = e => chunks.push(e.data);
+            mediaRecorder.onstop = salvarVideoNaGaleria;
+            mediaRecorder.start();
+
+            // TRANSMISSÃO AO VIVO (MONITOR)
+            conexoesAtivas.forEach(conn => {
+                peer.call(conn.peer, localStream);
+            });
+        }
+
+        function pararGravacaoETransmissao() {
+            gravando = false;
+            if (mediaRecorder) mediaRecorder.stop();
+            conexoesAtivas.forEach(conn => conn.send('fechar_video'));
+        }
+
+        function salvarVideoNaGaleria() {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const galeria = document.getElementById('galeria');
+            
+            const div = document.createElement('div');
+            div.className = 'card-video';
+            div.innerHTML = `
+                <video src="${url}" controls></video>
+                <a href="${url}" download="prova_${Date.now()}.webm" style="color:cyan; font-size:10px;">BAIXAR PROVA</a>
+            `;
+            galeria.prepend(div);
+        }
+
+        // --- LÓGICA DO MONITOR ---
+        function iniciarModoMonitor() {
             document.getElementById('menu-inicial').style.display = 'none';
-            document.getElementById('app-monitor').style.display = 'block';
+            document.getElementById('tela-monitor').style.display = 'block';
             peer = new Peer();
             
-            peer.on('open', id => {
-                document.getElementById('status').innerText = "Monitor Online";
-            });
-
             peer.on('call', call => {
                 call.answer();
-                document.getElementById('alerta-video').style.display = 'block';
+                document.getElementById('alerta-live').style.display = 'block';
                 call.on('stream', st => {
                     document.getElementById('remote-video').srcObject = st;
                 });
             });
         }
 
-        function conectarAoPeer() {
-            const targetId = document.getElementById('id-destino').value;
+        function conectarMonitor() {
+            const targetId = document.getElementById('id-camera').value;
             const conn = peer.connect(targetId);
             conn.on('open', () => {
-                alert("Conectado com sucesso!");
+                alert("Monitor Conectado à Câmera!");
                 conn.on('data', data => {
-                    if(data === 'stop') document.getElementById('alerta-video').style.display = 'none';
+                    if (data === 'fechar_video') document.getElementById('alerta-live').style.display = 'none';
                 });
             });
-        }
-
-        async function detectar() {
-            if (!model) return;
-            const predictions = await model.detect(document.getElementById('webcam'));
-            const person = predictions.some(p => p.class === 'person' && p.score > 0.6);
-
-            if (person) {
-                document.getElementById('status').classList.add('alerta');
-                document.getElementById('status').innerText = "⚠️ PESSOA DETECTADA";
-                conexoes.forEach(c => peer.call(c.peer, localStream));
-            } else {
-                document.getElementById('status').classList.remove('alerta');
-                document.getElementById('status').innerText = "Monitorando...";
-                conexoes.forEach(c => c.send('stop'));
-            }
-            requestAnimationFrame(detectar);
         }
     </script>
 </body>
