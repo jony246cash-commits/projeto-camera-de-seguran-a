@@ -1,94 +1,276 @@
-<script>
-let model, webcam, statusEl, galeriaEl;
-const status = document.getElementById('status');
-const video = document.getElementById('webcam');
-const galeria = document.getElementById('galeria');
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Guard - Câmera de Segurança</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <script src="https://unpkg.com/peerjs@1.3.1/dist/peerjs.min.js"></script> <!-- Biblioteca PeerJS para P2P -->
 
-async function init() {
-    status.textContent = 'Carregando modelo...';
-    try {
-        model = await cocoSsd.load(); // pode usar 'lite_mobilenet_v2' para mais rápido
-        status.textContent = 'Acessando câmera...';
+    <style>
+        body { font-family: sans-serif; margin: 0; background: #121212; color: white; text-align: center; }
+        #video-container { position: relative; width: 100%; max-width: 640px; margin: auto; background: #000; }
+        video { width: 100%; border-bottom: 3px solid #ff4444; }
+        canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
         
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'environment' }, // câmera traseira no celular
-            audio: false
-        });
-        video.srcObject = stream;
+        .controls { padding: 15px; display: flex; justify-content: space-around; background: #1e1e1e; }
+        button { padding: 10px 15px; border: none; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        .btn-main { background: #4CAF50; color: white; }
+        .btn-danger { background: #f44336; color: white; }
         
-        status.textContent = 'Online';
-        status.classList.add('online');
+        #galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; padding: 15px; }
+        .card-foto { background: #333; border-radius: 8px; overflow: hidden; font-size: 11px; }
+        .card-foto img { width: 100%; display: block; }
+        .status-badge { padding: 5px; font-size: 12px; }
+        .detected { background: #ff4444; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.5; } }
+
+        /* Nova tela de alternância */
+        #modo-selecao { padding: 20px; }
+        #modo-selecao button { margin: 10px; width: 80%; max-width: 300px; }
+        #config-monitor { display: none; padding: 15px; background: #1e1e1e; }
+        #config-monitor input { padding: 8px; margin: 5px; width: 200px; }
+        #cameras-conectadas { margin-top: 10px; }
+        #galeria-monitor { margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <div id="modo-selecao">
+        <h2>Escolha o Modo de Operação</h2>
+        <button class="btn-main" onclick="iniciarModoCamera()">Modo Câmera (Segurança)</button>
+        <button class="btn-main" onclick="iniciarModoMonitor()">Modo Monitor (Visualização)</button>
+    </div>
+
+    <div id="app-container" style="display: none;">
+        <h2>Smart Guard Observador</h2>
         
-        detectFrame(); // inicia loop de detecção
-    } catch (e) {
-        status.textContent = 'Erro: ' + e.message;
-        status.classList.add('alert');
-        console.error(e);
-    }
-}
+        <div id="status" class="status-badge">Carregando IA...</div>
 
-async function detectFrame() {
-    if (!model) return;
-    
-    const predictions = await model.detect(video);
-    
-    // Exemplo: se detectar pessoa, captura foto
-    const pessoa = predictions.find(p => p.class === 'person' && p.score > 0.6);
-    if (pessoa) {
-        capturarFoto();
-        status.textContent = 'ALERTA: Pessoa detectada!';
-        status.classList.add('alert');
-        setTimeout(() => {
-            status.classList.remove('alert');
-            status.textContent = 'Online';
-        }, 3000);
-    }
-    
-    requestAnimationFrame(detectFrame); // loop contínuo ~30fps
-}
+        <div id="video-container">
+            <video id="webcam" autoplay muted playsinline></video>
+        </div>
 
-function capturarFoto() {
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-    
-    const dataURL = canvas.toDataURL('image/jpeg', 0.8);
-    const timestamp = new Date().toLocaleString();
-    
-    // Salva no localStorage (máx ~5-10MB por domínio)
-    let fotos = JSON.parse(localStorage.getItem('fotosSeguranca') || '[]');
-    fotos.unshift({dataURL, timestamp}); // mais nova primeiro
-    if (fotos.length > 50) fotos.pop(); // limita quantidade
-    localStorage.setItem('fotosSeguranca', JSON.stringify(fotos));
-    
-    carregarGaleria();
-}
+        <div class="controls">
+            <button class="btn-main" onclick="carregarFotos()">Ver Galeria</button>
+            <button class="btn-danger" onclick="limparTudo()">Limpar Memória</button>
+        </div>
 
-function carregarGaleria() {
-    galeria.innerHTML = '';
-    const fotos = JSON.parse(localStorage.getItem('fotosSeguranca') || '[]');
-    fotos.forEach(foto => {
-        const card = document.createElement('div');
-        card.className = 'card-foto';
-        card.innerHTML = `
-            <img src="${foto.dataURL}">
-            <div>${foto.timestamp}</div>
-        `;
-        galeria.appendChild(card);
-    });
-}
+        <div id="galeria"></div>
+    </div>
 
-function limparMemoria() {
-    if (confirm('Tem certeza que quer apagar todas as fotos?')) {
-        localStorage.removeItem('fotosSeguranca');
-        carregarGaleria();
-    }
-}
+    <!-- Configuração para Modo Monitor -->
+    <div id="config-monitor">
+        <h3>Modo Monitor: Conecte até 5 Câmeras</h3>
+        <input type="text" id="camera-id" placeholder="ID da Câmera (ex: camera1)">
+        <button class="btn-main" onclick="conectarCamera()">Conectar Câmera</button>
+        <div id="cameras-conectadas"></div>
+        <div id="galeria-monitor">
+            <h4>Alertas Recebidos</h4>
+            <!-- Galeria para fotos recebidas -->
+        </div>
+    </div>
 
-// Inicia tudo quando página carrega
-window.onload = () => {
-    init();
-    carregarGaleria();
-};
-</script>
+    <script>
+        const video = document.getElementById('webcam');
+        const status = document.getElementById('status');
+        const DB_NAME = "SecurityDB";
+        const MAX_FOTOS = 50;
+        let db, model;
+        let ultimaCaptura = 0;
+        let peer; // PeerJS instance
+        let conexoes = []; // Conexões no modo câmera
+        let conexoesMonitor = []; // Conexões no modo monitor
+        let modoAtual = null; // 'camera' ou 'monitor'
+
+        // Inicializar IndexedDB
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = e => {
+            e.target.result.createObjectStore("invasores", { keyPath: "id", autoIncrement: true });
+        };
+        request.onsuccess = e => { db = e.target.result; };
+
+        // Iniciar Modo Câmera
+        function iniciarModoCamera() {
+            modoAtual = 'camera';
+            document.getElementById('modo-selecao').style.display = 'none';
+            document.getElementById('app-container').style.display = 'block';
+            document.getElementById('config-monitor').style.display = 'none';
+
+            // Criar Peer com ID único (pode ser gerado ou definido pelo usuário)
+            const cameraId = prompt('Defina um ID para esta câmera (ex: camera1):');
+            if (!cameraId) return;
+            peer = new Peer(cameraId, { host: 'peerjs-server.herokuapp.com', port: 443, path: '/' }); // Use um servidor PeerJS público
+
+            peer.on('open', id => {
+                status.innerText = `Câmera ID: ${id} - Aguardando conexões...`;
+            });
+
+            peer.on('connection', conn => {
+                conexoes.push(conn);
+                conn.on('open', () => {
+                    status.innerText = `Conectado a monitor. Total: ${conexoes.length}`;
+                });
+            });
+
+            setupApp();
+        }
+
+        // Iniciar Modo Monitor
+        function iniciarModoMonitor() {
+            modoAtual = 'monitor';
+            document.getElementById('modo-selecao').style.display = 'none';
+            document.getElementById('app-container').style.display = 'none';
+            document.getElementById('config-monitor').style.display = 'block';
+
+            // Criar Peer para monitor (ID único não necessário, mas pode ter)
+            peer = new Peer(); // ID automático
+
+            peer.on('open', id => {
+                status.innerText = `Monitor ID: ${id} - Conecte câmeras via ID.`;
+            });
+        }
+
+        // Conectar a uma câmera no modo monitor
+        function conectarCamera() {
+            const cameraId = document.getElementById('camera-id').value;
+            if (!cameraId || conexoesMonitor.length >= 5) {
+                alert('ID inválido ou limite de 5 câmeras atingido.');
+                return;
+            }
+
+            const conn = peer.connect(cameraId);
+            conn.on('open', () => {
+                conexoesMonitor.push(conn);
+                atualizarCamerasConectadas();
+                conn.on('data', data => {
+                    // Receber foto e exibir
+                    const galeriaMonitor = document.getElementById('galeria-monitor');
+                    const div = document.createElement('div');
+                    div.className = 'card-foto';
+                    div.innerHTML = `<img src="${data.foto}"><span>${data.data} - De: ${cameraId}</span>`;
+                    galeriaMonitor.appendChild(div);
+                });
+            });
+        }
+
+        // Atualizar lista de câmeras conectadas
+        function atualizarCamerasConectadas() {
+            const lista = document.getElementById('cameras-conectadas');
+            lista.innerHTML = `Câmeras conectadas: ${conexoesMonitor.map(c => c.peer).join(', ')}`;
+        }
+
+        // Setup da câmera e IA (apenas para modo câmera)
+        async function setupApp() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+                video.srcObject = stream;
+                
+                status.innerText = "Carregando Modelo COCO-SSD...";
+                model = await cocoSsd.load();
+                status.innerText = "Monitorando Ambiente...";
+                
+                detectar();
+            } catch (err) {
+                status.innerText = "Erro ao acessar câmera: " + err;
+            }
+        }
+
+        // Loop de Detecção (modo câmera)
+        async function detectar() {
+            const predictions = await model.detect(video);
+            let pessoaEncontrada = false;
+
+            predictions.forEach(p => {
+                if (p.class === 'person' && p.score > 0.6) {
+                    pessoaEncontrada = true;
+                }
+            });
+
+            if (pessoaEncontrada) {
+                status.innerText = "!!! PESSOA DETECTADA !!!";
+                status.classList.add('detected');
+                
+                const agora = Date.now();
+                if (agora - ultimaCaptura > 5000) {
+                    tirarFoto();
+                    ultimaCaptura = agora;
+                }
+            } else {
+                status.innerText = "Monitorando...";
+                status.classList.remove('detected');
+            }
+
+            requestAnimationFrame(detectar);
+        }
+
+        // Capturar e Salvar Foto (modo câmera)
+        function tirarFoto() {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth / 2;
+            canvas.height = video.videoHeight / 2;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.toBlob(blob => {
+                const data = new Date().toLocaleString();
+                const transaction = db.transaction(["invasores"], "readwrite");
+                const store = transaction.objectStore("invasores");
+                
+                store.add({ data, foto: blob });
+
+                // Enviar para monitores conectados (via PeerJS)
+                canvas.toDataURL('image/jpeg', 0.6, (dataURL) => {
+                    const payload = { data, foto: dataURL };
+                    conexoes.forEach(conn => conn.send(payload));
+                });
+
+                // Auto-limpeza
+                store.count().onsuccess = e => {
+                    if (e.target.result > MAX_FOTOS) {
+                        store.openCursor().onsuccess = ev => {
+                            const cursor = ev.target.result;
+                            if (cursor) store.delete(cursor.key);
+                        };
+                    }
+                };
+            }, 'image/jpeg', 0.6);
+        }
+
+        // Exibir Galeria Local (modo câmera)
+        function carregarFotos() {
+            if (modoAtual !== 'camera') return;
+            const galeria = document.getElementById('galeria');
+            galeria.innerHTML = "Carregando...";
+            
+            const store = db.transaction("invasores").objectStore("invasores");
+            galeria.innerHTML = "";
+
+            store.openCursor(null, "prev").onsuccess = e => {
+                const cursor = e.target.result;
+                if (cursor) {
+                    const div = document.createElement('div');
+                    div.className = 'card-foto';
+                    const url = URL.createObjectURL(cursor.value.foto);
+                    div.innerHTML = `<img src="${url}"><span>${cursor.value.data}</span>`;
+                    galeria.appendChild(div);
+                    cursor.continue();
+                }
+            };
+        }
+
+        function limparTudo() {
+            if(confirm("Apagar todas as fotos?")) {
+                db.transaction("invasores", "readwrite").objectStore("invasores").clear();
+                carregarFotos();
+            }
+        }
+
+        // Bloquear desligamento da tela
+        if ('wakeLock' in navigator) {
+            navigator.wakeLock.request('screen').catch(() => {});
+        }
+    </script>
+</body>
+</html>
