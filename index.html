@@ -2,129 +2,146 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Guard Pro - Gravação Ativa</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Smart Guard Pro</title>
     
-   // Garante que o código só rode após a página carregar totalmente
-window.onload = function() {
-    console.log("Sistema Smart Guard carregado e pronto.");
-    document.getElementById('status').innerText = "Sistema Pronto - Escolha um modo";
-};
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
 
     <style>
-        body { font-family: sans-serif; margin: 0; background: #0f0f0f; color: white; text-align: center; }
-        .status-badge { padding: 15px; background: #222; border-bottom: 2px solid #444; font-weight: bold; }
-        .detected { background: #dc2626; animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.7; } }
-        #video-container { width: 100%; max-width: 640px; margin: 10px auto; background: #000; border-radius: 8px; overflow: hidden; }
-        video { width: 100%; display: block; }
-        .controls { padding: 20px; }
-        button { padding: 15px 25px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin: 5px; transition: 0.3s; }
-        .btn-main { background: #059669; color: white; }
-        .btn-gallery { background: #2563eb; color: white; }
-        #modo-selecao { padding-top: 50px; }
-        .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 20px; }
-        .card-video { background: #222; border: 1px solid #444; border-radius: 5px; padding: 5px; }
-        .card-video video { width: 100%; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; background: #000; color: #fff; text-align: center; overscroll-behavior: none; }
+        .status-badge { padding: 15px; background: #1a1a1a; font-size: 14px; border-bottom: 1px solid #333; }
+        #video-container { width: 100%; max-width: 640px; margin: auto; background: #000; }
+        video { width: 100%; height: auto; border-radius: 0 0 10px 10px; }
+        .menu { padding: 40px 20px; }
+        button { width: 80%; max-width: 300px; padding: 18px; margin: 10px; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; }
+        .btn-cam { background: #059669; color: white; }
+        .btn-mon { background: #2563eb; color: white; }
+        #app-camera, #app-monitor { display: none; }
+        .alerta { background: #ef4444 !important; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
 
-    <div id="status" class="status-badge">Sistema Pronto</div>
+    <div id="status" class="status-badge">Carregando Sistema...</div>
 
-    <div id="modo-selecao">
-        <h1>🛡️ Smart Guard Pro</h1>
-        <button class="btn-main" onclick="window.iniciarModoCamera()">MODO CÂMERA</button>
-        <button class="btn-main" onclick="window.iniciarModoMonitor()">MODO MONITOR</button>
+    <div id="menu-inicial" class="menu">
+        <h1>🛡️ Smart Guard</h1>
+        <p>Aguarde o status ficar "Pronto" antes de clicar.</p>
+        <button id="btnIniciarCamera" class="btn-cam">MODO CÂMERA</button>
+        <button id="btnIniciarMonitor" class="btn-mon">MODO MONITOR</button>
     </div>
 
-    <div id="app-camera" style="display: none;">
+    <div id="app-camera">
         <div id="video-container">
             <video id="webcam" autoplay muted playsinline></video>
         </div>
-        <div class="controls">
-            <button class="btn-gallery" onclick="window.mostrarGaleria()">Ver Gravações</button>
-        </div>
-        <div id="galeria-local" class="galeria"></div>
+        <p>Sua câmera está ativa e protegendo o local.</p>
     </div>
 
-    <div id="config-monitor" style="display: none; padding: 20px;">
-        <div id="monitor-ao-vivo" style="display:none; border: 4px solid red; margin-bottom: 20px;">
-            <h3>🔴 ALERTA EM TEMPO REAL</h3>
-            <video id="remote-video" autoplay playsinline style="width:100%"></video>
+    <div id="app-monitor" style="padding: 20px;">
+        <div id="alerta-video" style="display:none;">
+            <h2 class="alerta" style="padding:10px; border-radius:8px;">🔴 MOVIMENTO DETECTADO</h2>
+            <video id="remote-video" autoplay playsinline style="width:100%;"></video>
         </div>
-        <input type="text" id="camera-id-input" placeholder="ID da Câmera" style="padding: 12px; width: 220px; border-radius: 5px;">
-        <button class="btn-main" onclick="window.conectarCamera()">CONECTAR</button>
+        <input type="text" id="id-destino" placeholder="ID da Câmera" style="padding:15px; width:80%; border-radius:8px; margin-bottom:10px;">
+        <button id="btnConectar" class="btn-mon">CONECTAR AGORA</button>
     </div>
 
     <script>
-        var model, peer, mediaRecorder;
-        var chunks = [];
-        var gravando = false;
-        var conexoes = [];
-        var videosGravados = []; // Armazenamento temporário (em memória)
+        let model, peer, localStream, mediaRecorder;
+        let conexoes = [];
 
-        window.iniciarModoCamera = async function() {
-            const cid = prompt("Crie um ID para sua câmera:");
-            if (!cid) return;
+        // Inicialização Segura
+        window.addEventListener('load', () => {
+            document.getElementById('status').innerText = "✅ Sistema Pronto";
+            
+            // Configura os botões via código (evita erro de 'not defined')
+            document.getElementById('btnIniciarCamera').addEventListener('click', iniciarCamera);
+            document.getElementById('btnIniciarMonitor').addEventListener('click', iniciarMonitor);
+            document.getElementById('btnConectar').addEventListener('click', conectarAoPeer);
+        });
 
-            document.getElementById('modo-selecao').style.display = 'none';
-            document.getElementById('app-camera').style.display = 'block';
-
-            peer = new Peer(cid);
-            peer.on('open', id => {
-                document.getElementById('status').innerText = "CÂMERA ONLINE | ID: " + id;
-                document.getElementById('status').style.color = "#10b981";
-            });
-
-            peer.on('connection', conn => {
-                conexoes.push(conn);
-                document.getElementById('status').innerText = "Monitores Conectados: " + conexoes.length;
-            });
+        async function iniciarCamera() {
+            const id = prompt("Defina um ID para esta câmera:");
+            if (!id) return;
 
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-                document.getElementById('webcam').srcObject = stream;
-                model = await cocoSsd.load();
-                detectarLoop();
-            } catch (e) {
-                alert("Erro ao acessar câmera: " + e.message);
-            }
-        };
+                document.getElementById('status').innerText = "Acessando Câmera...";
+                localStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: "environment" }, 
+                    audio: false 
+                });
+                
+                document.getElementById('webcam').srcObject = localStream;
+                document.getElementById('menu-inicial').style.display = 'none';
+                document.getElementById('app-camera').style.display = 'block';
 
-        window.iniciarModoMonitor = function() {
-            document.getElementById('modo-selecao').style.display = 'none';
-            document.getElementById('config-monitor').style.display = 'block';
+                peer = new Peer(id);
+                peer.on('open', () => {
+                    document.getElementById('status').innerText = "Câmera Online: " + id;
+                });
+
+                peer.on('connection', conn => {
+                    conexoes.push(conn);
+                    document.getElementById('status').innerText = "Conectado ao Monitor";
+                });
+
+                // Iniciar IA de forma leve
+                model = await cocoSsd.load({ base: 'mobilenet_v1' });
+                detectar();
+            } catch (e) {
+                alert("Erro: Use HTTPS e autorize a câmera. " + e.message);
+            }
+        }
+
+        function iniciarMonitor() {
+            document.getElementById('menu-inicial').style.display = 'none';
+            document.getElementById('app-monitor').style.display = 'block';
             peer = new Peer();
+            
+            peer.on('open', id => {
+                document.getElementById('status').innerText = "Monitor Online";
+            });
+
             peer.on('call', call => {
                 call.answer();
-                document.getElementById('monitor-ao-vivo').style.display = 'block';
-                call.on('stream', st => { document.getElementById('remote-video').srcObject = st; });
-            });
-        };
-
-        window.conectarCamera = function() {
-            const tid = document.getElementById('camera-id-input').value;
-            const conn = peer.connect(tid);
-            conn.on('open', () => {
-                document.getElementById('status').innerText = "CONECTADO À CÂMERA: " + tid;
-                conn.on('data', data => {
-                    if(data.acao === 'parar_video') document.getElementById('monitor-ao-vivo').style.display = 'none';
+                document.getElementById('alerta-video').style.display = 'block';
+                call.on('stream', st => {
+                    document.getElementById('remote-video').srcObject = st;
                 });
             });
-        };
+        }
 
-        async function detectarLoop() {
+        function conectarAoPeer() {
+            const targetId = document.getElementById('id-destino').value;
+            const conn = peer.connect(targetId);
+            conn.on('open', () => {
+                alert("Conectado com sucesso!");
+                conn.on('data', data => {
+                    if(data === 'stop') document.getElementById('alerta-video').style.display = 'none';
+                });
+            });
+        }
+
+        async function detectar() {
             if (!model) return;
             const predictions = await model.detect(document.getElementById('webcam'));
-            const invasor = predictions.some(p => p.class === 'person' && p.score > 0.6);
+            const person = predictions.some(p => p.class === 'person' && p.score > 0.6);
 
-            if (invasor) {
-                document.getElementById('status').classList.add('detected');
-                document.getElementById('status').innerText = "⚠️ MOVIMENTO DETECTADO!";
-                
-                if (!gravando) {
-                    iniciarGravacao();
-                }
+            if (person) {
+                document.getElementById('status').classList.add('alerta');
+                document.getElementById('status').innerText = "⚠️ PESSOA DETECTADA";
+                conexoes.forEach(c => peer.call(c.peer, localStream));
             } else {
-
+                document.getElementById('status').classList.remove('alerta');
+                document.getElementById('status').innerText = "Monitorando...";
+                conexoes.forEach(c => c.send('stop'));
+            }
+            requestAnimationFrame(detectar);
+        }
+    </script>
+</body>
+</html>
