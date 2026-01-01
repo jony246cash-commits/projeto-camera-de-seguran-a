@@ -3,247 +3,193 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Guard Pro v2 - Multi-Monitor</title>
+    <title>Smart Guard Lite - Transmissão Direta</title>
     
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
 
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; background: #050505; color: #fff; text-align: center; }
-        .status-badge { padding: 15px; background: #111; font-size: 14px; border-bottom: 2px solid #222; color: #10b981; font-weight: bold; }
-        .painel { padding: 40px 20px; }
-        h1 { margin-bottom: 5px; color: #f3f4f6; }
-        button { width: 90%; max-width: 320px; padding: 20px; margin: 10px; border: none; border-radius: 15px; font-weight: bold; cursor: pointer; font-size: 16px; transition: all 0.2s; }
-        button:hover { opacity: 0.9; transform: translateY(-2px); }
-        .btn-cam { background: #10b981; color: white; }
-        .btn-mon { background: #3b82f6; color: white; }
+        body { font-family: sans-serif; margin: 0; background: #0a0a0a; color: #fff; text-align: center; }
+        .status-badge { padding: 12px; background: #111; font-size: 13px; border-bottom: 2px solid #333; color: #3b82f6; }
+        .painel { padding: 30px 20px; }
+        button { width: 85%; max-width: 300px; padding: 18px; margin: 8px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 15px; }
+        .btn-cam { background: #059669; color: white; }
+        .btn-mon { background: #2563eb; color: white; }
         
-        /* Grid de Câmeras */
-        #lista-cameras { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; padding: 20px; }
-        .camera-card { background: #151515; padding: 15px; width: 320px; border-radius: 18px; border: 2px solid #222; text-align: left; }
-        .camera-card.alert { border-color: #ef4444; animation: pulse-red 1.5s infinite; }
-        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 15px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
-        
-        .video-wrapper { width: 100%; height: 180px; margin-top: 12px; border-radius: 10px; overflow: hidden; background: #000; position: relative; display: none; }
-        video { width: 100%; height: 100%; object-fit: cover; }
-        .cam-label { font-size: 14px; color: #9ca3af; }
-        .cam-id { font-weight: bold; color: #3b82f6; }
+        .camera-card { background: #1a1a1a; margin: 15px auto; padding: 15px; width: 90%; max-width: 450px; border-radius: 12px; border: 1px solid #333; text-align: left; }
+        .video-wrapper { width: 100%; border-radius: 8px; overflow: hidden; background: #000; margin-top: 10px; }
+        video { width: 100%; display: block; }
 
-        .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; padding: 20px; }
-        .prova-item { background: #111; padding: 10px; border-radius: 12px; border: 1px solid #333; }
-        .btn-dl { color: #22d3ee; display: block; margin-top: 8px; text-decoration: none; font-size: 12px; border: 1px solid #22d3ee; padding: 5px; border-radius: 6px; }
+        .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 15px; }
+        .prova-item { background: #222; padding: 8px; border-radius: 8px; font-size: 11px; }
     </style>
 </head>
 <body>
 
-    <div id="status" class="status-badge">🟡 Carregando Inteligência Artificial...</div>
+    <div id="status" class="status-badge">🔵 Sistema de Transmissão Pronto</div>
 
     <div id="menu-inicial" class="painel">
-        <h1>🛡️ Smart Guard Multi</h1>
-        <p style="color: #6b7280;">Sistema de Segurança P2P</p><br>
-        <button id="btnCam" class="btn-cam">MODO CÂMERA (Filmar)</button><br>
-        <button id="btnMon" class="btn-mon">MODO MONITOR (Central)</button>
+        <h1>🛡️ Smart Guard Lite</h1>
+        <p>Transmissão Contínua & Gravação 24h</p>
+        <button id="btnCam" class="btn-cam">MODO CÂMERA (Transmitir)</button><br>
+        <button id="btnMon" class="btn-mon">MODO MONITOR (Visualizar)</button>
     </div>
 
     <div id="tela-camera" style="display:none;">
-        <h2 id="cam-nome-display">Câmera Ativa</h2>
-        <video id="webcam" autoplay muted playsinline style="width: 90%; max-width: 500px; border-radius: 20px; background: #000;"></video>
-        <p id="info-ia" style="color: #10b981;">🔍 Analisando ambiente...</p>
+        <h3 id="cam-id-txt">Câmera Ativa</h3>
+        <video id="webcam" autoplay muted playsinline style="width: 80%; border-radius: 10px;"></video>
+        <p>📡 Transmitindo e gravando em blocos de 2 min...</p>
     </div>
 
     <div id="tela-monitor" style="display:none;">
-        <h2>Central de Controle</h2>
-        <div style="margin-bottom: 20px;">
-            <input type="text" id="id-nova-camera" placeholder="ID da Câmera" style="padding: 15px; border-radius: 10px; border: none; width: 200px; outline: none;">
-            <button id="btnAdd" style="width: auto; padding: 15px 25px;" class="btn-mon">CONECTAR</button>
-        </div>
+        <h3>Central de Monitoramento</h3>
+        <input type="text" id="id-nova-camera" placeholder="ID da Câmera" style="padding:12px; border-radius:8px; border:none; width:150px;">
+        <button id="btnAdd" style="width:auto; padding:12px;" class="btn-mon">VER</button>
+        
         <div id="lista-cameras"></div>
-        <h3>🎞️ Últimas Ocorrências</h3>
+        
+        <h4>🎥 Gravações Recentes (Auto-limpeza 24h)</h4>
         <div id="galeria-provas" class="galeria"></div>
     </div>
 
     <script>
-        let peer, localStream, model, mediaRecorder;
+        let peer, localStream, mediaRecorder;
         let chunks = [];
-        let gravando = false;
-        let conexoes = {}; 
+        let conexoes = {};
+        const TEMPO_GRAVACAO = 120000; // 2 minutos em milissegundos
 
-        // 1. Inicialização Assíncrona para evitar travamento
-        async function bootstrap() {
-            try {
-                // Carrega o modelo Coco-SSD antes de liberar a interface
-                model = await cocoSsd.load();
-                document.getElementById('status').innerText = "✅ Sistema Pronto";
-                
-                document.getElementById('btnCam').onclick = iniciarModoCamera;
-                document.getElementById('btnMon').onclick = iniciarModoMonitor;
-            } catch (e) {
-                document.getElementById('status').innerText = "❌ Erro ao carrergar IA: Verifique a Internet";
-                console.error(e);
-            }
-        }
+        // --- INICIALIZAÇÃO ---
+        window.onload = () => {
+            document.getElementById('btnCam').onclick = modoCamera;
+            document.getElementById('btnMon').onclick = modoMonitor;
+            // Limpa gravações velhas ao abrir
+            limparGravacoesAntigas();
+        };
 
         // --- LÓGICA DA CÂMERA ---
-        async function iniciarModoCamera() {
-            const id = prompt("Nome desta câmera (ex: sala, porta):");
+        async function modoCamera() {
+            const id = prompt("Nome desta câmera:");
             if (!id) return;
 
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: "environment", width: 640 }, 
-                    audio: false 
-                });
-                
-                document.getElementById('webcam').srcObject = localStream;
-                document.getElementById('menu-inicial').style.display = 'none';
-                document.getElementById('tela-camera').style.display = 'block';
-                document.getElementById('cam-nome-display').innerText = "🎥 Câmera: " + id;
+            localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true });
+            document.getElementById('webcam').srcObject = localStream;
+            document.getElementById('menu-inicial').style.display = 'none';
+            document.getElementById('tela-camera').style.display = 'block';
+            document.getElementById('cam-id-txt').innerText = "🎥 Câmera: " + id;
 
-                peer = new Peer(id, { config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]} });
-
-                // Quando o monitor se conecta
-                peer.on('connection', conn => {
-                    conexoes[conn.peer] = conn;
-                    document.getElementById('status').innerText = "📡 Monitor Conectado";
-                });
-
-                // Quando o monitor liga para ver o vídeo
-                peer.on('call', call => call.answer(localStream));
-
-                monitorarAmbiente();
-            } catch (err) {
-                alert("Erro: " + err.message);
-            }
-        }
-
-        async function monitorarAmbiente() {
-            const predictions = await model.detect(document.getElementById('webcam'));
-            const personDetected = predictions.some(p => p.class === 'person' && p.score > 0.6);
-
-            if (personDetected && !gravando) {
-                comecarGravacao();
-            } else if (!personDetected && gravando) {
-                pararGravacao();
-            }
-            requestAnimationFrame(monitorarAmbiente);
-        }
-
-        function comecarGravacao() {
-            gravando = true;
-            chunks = [];
-            mediaRecorder = new MediaRecorder(localStream);
-            mediaRecorder.ondataavailable = e => chunks.push(e.data);
-            mediaRecorder.onstop = enviarEvidencia;
-            mediaRecorder.start();
-
-            Object.values(conexoes).forEach(conn => {
-                conn.send({ tipo: 'alerta', status: 'ON' });
+            peer = new Peer(id, { config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]} });
+            
+            peer.on('connection', conn => {
+                conexoes[conn.peer] = conn;
+                // Envia o stream imediatamente ao conectar
                 peer.call(conn.peer, localStream);
             });
+
+            iniciarLoopGravacao();
         }
 
-        function pararGravacao() {
-            gravando = false;
-            mediaRecorder.stop();
-            Object.values(conexoes).forEach(conn => conn.send({ tipo: 'alerta', status: 'OFF' }));
+        function iniciarLoopGravacao() {
+            mediaRecorder = new MediaRecorder(localStream);
+            mediaRecorder.ondataavailable = e => chunks.push(e.data);
+            mediaRecorder.onstop = salvarEEnviarBloco;
+            
+            mediaRecorder.start();
+            console.log("Iniciando bloco de 2 minutos...");
+
+            setTimeout(() => {
+                mediaRecorder.stop();
+                iniciarLoopGravacao(); // Reinicia o ciclo
+            }, TEMPO_GRAVACAO);
         }
 
-        function enviarEvidencia() {
+        function salvarEEnviarBloco() {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const reader = new FileReader();
             reader.readAsDataURL(blob);
             reader.onloadend = () => {
                 Object.values(conexoes).forEach(conn => {
-                    conn.send({ tipo: 'video', data: reader.result, de: peer.id });
+                    conn.send({ tipo: 'arquivo', data: reader.result, de: peer.id, timestamp: Date.now() });
                 });
+                chunks = [];
             };
         }
 
         // --- LÓGICA DO MONITOR ---
-        function iniciarModoMonitor() {
+        function modoMonitor() {
             document.getElementById('menu-inicial').style.display = 'none';
             document.getElementById('tela-monitor').style.display = 'block';
-            document.getElementById('status').innerText = "🖥️ Central Ativa";
-            
             peer = new Peer();
 
             document.getElementById('btnAdd').onclick = () => {
-                const idCam = document.getElementById('id-nova-camera').value;
-                conectarACamera(idCam);
+                const id = document.getElementById('id-nova-camera').value;
+                const conn = peer.connect(id);
+                
+                conn.on('open', () => {
+                    if (!document.getElementById('card-'+id)) criarCard(id);
+                });
+
+                conn.on('data', msg => {
+                    if (msg.tipo === 'arquivo') {
+                        adicionarGaleria(msg.data, msg.de, msg.timestamp);
+                    }
+                });
             };
 
-            // Recebe o stream de vídeo quando houver alerta
             peer.on('call', call => {
                 call.answer();
-                call.on('stream', stream => {
-                    const videoTag = document.querySelector(`#vid-${call.peer}`);
-                    const wrapper = document.querySelector(`#wrap-${call.peer}`);
-                    if (videoTag) {
-                        videoTag.srcObject = stream;
-                        wrapper.style.display = 'block';
-                    }
+                call.on('stream', st => {
+                    const vid = document.querySelector(`#vid-${call.peer}`);
+                    if (vid) vid.srcObject = st;
                 });
             });
         }
 
-        function conectarACamera(id) {
-            if (!id || conexoes[id]) return;
-
-            const conn = peer.connect(id);
-            conn.on('open', () => {
-                conexoes[id] = conn;
-                criarCardCamera(id);
-                document.getElementById('id-nova-camera').value = "";
-            });
-
-            conn.on('data', msg => {
-                const card = document.getElementById(`card-${id}`);
-                const statusTxt = document.getElementById(`status-${id}`);
-                const wrapper = document.getElementById(`wrap-${id}`);
-
-                if (msg.tipo === 'alerta') {
-                    if (msg.status === 'ON') {
-                        card.classList.add('alert');
-                        statusTxt.innerText = "⚠️ MOVIMENTO!";
-                        statusTxt.style.color = "#ef4444";
-                    } else {
-                        card.classList.remove('alert');
-                        statusTxt.innerText = "✅ Protegido";
-                        statusTxt.style.color = "#10b981";
-                        wrapper.style.display = 'none';
-                    }
-                }
-                if (msg.tipo === 'video') adicionarGaleria(msg.data, msg.de);
-            });
-        }
-
-        function criarCardCamera(id) {
+        function criarCard(id) {
             const div = document.createElement('div');
-            div.id = `card-${id}`;
+            div.id = 'card-'+id;
             div.className = 'camera-card';
             div.innerHTML = `
-                <div class="cam-label">Status: <span id="status-${id}" style="color:#10b981">✅ Conectado</span></div>
-                <div class="cam-id">📍 ${id.toUpperCase()}</div>
-                <div id="wrap-${id}" class="video-wrapper">
-                    <video id="vid-${id}" autoplay muted playsinline></video>
-                </div>
+                <b>📍 ${id}</b> (Ao Vivo)
+                <div class="video-wrapper"><video id="vid-${id}" autoplay muted playsinline></video></div>
             `;
             document.getElementById('lista-cameras').appendChild(div);
         }
 
-        function adicionarGaleria(url, de) {
-            const item = document.createElement('div');
-            item.className = 'prova-item';
-            item.innerHTML = `
-                <video src="${url}" controls></video>
-                <div style="font-size:10px; margin-top:5px;">${de} - ${new Date().toLocaleTimeString()}</div>
-                <a href="${url}" download="alerta.webm" class="btn-dl">DOWNLOAD</a>
-            `;
-            document.getElementById('galeria-provas').prepend(item);
+        function adicionarGaleria(url, de, time) {
+            // Salva no localStorage para persistir por 24h
+            const gravacoes = JSON.parse(localStorage.getItem('vigilancia_vids') || '[]');
+            gravacoes.push({ url, de, time });
+            localStorage.setItem('vigilancia_vids', JSON.stringify(gravacoes));
+            
+            renderizarGaleria();
         }
 
-        window.onload = bootstrap;
+        function renderizarGaleria() {
+            const lista = document.getElementById('galeria-provas');
+            lista.innerHTML = '';
+            const gravacoes = JSON.parse(localStorage.getItem('vigilancia_vids') || '[]');
+            
+            gravacoes.reverse().forEach(vid => {
+                const item = document.createElement('div');
+                item.className = 'prova-item';
+                item.innerHTML = `
+                    <video src="${vid.url}" controls></video>
+                    <br>${vid.de} - ${new Date(vid.time).toLocaleTimeString()}
+                `;
+                lista.appendChild(item);
+            });
+        }
+
+        function limparGravacoesAntigas() {
+            const agora = Date.now();
+            const vinteQuatroHoras = 24 * 60 * 60 * 1000;
+            let gravacoes = JSON.parse(localStorage.getItem('vigilancia_vids') || '[]');
+            
+            // Filtra apenas o que tem menos de 24 horas
+            gravacoes = gravacoes.filter(vid => (agora - vid.time) < vinteQuatroHoras);
+            
+            localStorage.setItem('vigilancia_vids', JSON.stringify(gravacoes));
+            renderizarGaleria();
+        }
     </script>
 </body>
 </html>
