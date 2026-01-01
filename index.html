@@ -52,144 +52,166 @@
     </div>
 
     <script>
-        let peer, localStream, mediaRecorder;
-        let chunks = [];
-        let conexoes = {};
-        const TEMPO_GRAVACAO = 120000; // 2 minutos em milissegundos
+let peer, localStream, mediaRecorder;
+let chunks = [];
+let conexoes = {};
+const TEMPO_GRAVACAO = 120000; // 2 minutos
 
-        // --- INICIALIZAÇÃO ---
-        window.onload = () => {
-            document.getElementById('btnCam').onclick = modoCamera;
-            document.getElementById('btnMon').onclick = modoMonitor;
-            // Limpa gravações velhas ao abrir
-            limparGravacoesAntigas();
+// --- INICIALIZAÇÃO E BANCO DE DADOS (IndexedDB para vídeos grandes) ---
+const dbRequest = indexedDB.open("VigilanciaDB", 1);
+let db;
+
+dbRequest.onupgradeneeded = e => {
+    db = e.target.result;
+    db.createObjectStore("videos", { keyPath: "id", autoIncrement: true });
+};
+dbRequest.onsuccess = e => db = e.target.result;
+
+window.onload = () => {
+    document.getElementById('btnCam').onclick = modoCamera;
+    document.getElementById('btnMon').onclick = modoMonitor;
+};
+
+// --- LÓGICA DA CÂMERA ---
+async function modoCamera() {
+    const id = prompt("Nome desta câmera:");
+    if (!id) return;
+
+    try {
+        // Reduzindo a resolução para garantir que a transmissão seja leve
+        localStream = await navigator.mediaDevices.getUserMedia({ 
+            video: { width: 640, height: 480, facingMode: "environment" }, 
+            audio: true 
+        });
+        
+        const videoLocal = document.getElementById('webcam');
+        videoLocal.srcObject = localStream;
+        videoLocal.onloadedmetadata = () => videoLocal.play(); // Força o play
+
+        document.getElementById('menu-inicial').style.display = 'none';
+        document.getElementById('tela-camera').style.display = 'block';
+
+        peer = new Peer(id, { config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]} });
+        
+        peer.on('connection', conn => {
+            conexoes[conn.peer] = conn;
+            console.log("Monitor conectado:", conn.peer);
+            // Liga para o monitor para enviar o vídeo
+            setTimeout(() => peer.call(conn.peer, localStream), 1000);
+        });
+
+        iniciarLoopGravacao();
+    } catch (err) {
+        alert("Erro na Câmera: " + err.message);
+    }
+}
+
+function iniciarLoopGravacao() {
+    mediaRecorder = new MediaRecorder(localStream, { mimeType: 'video/webm;codecs=vp8' });
+    chunks = [];
+    
+    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    
+    mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = () => {
+            Object.values(conexoes).forEach(conn => {
+                conn.send({ tipo: 'arquivo', data: reader.result, de: peer.id, time: Date.now() });
+            });
         };
+        iniciarLoopGravacao(); // Reinicia o ciclo
+    };
+    
+    mediaRecorder.start();
+    setTimeout(() => { if(mediaRecorder.state === "recording") mediaRecorder.stop(); }, TEMPO_GRAVACAO);
+}
 
-        // --- LÓGICA DA CÂMERA ---
-        async function modoCamera() {
-            const id = prompt("Nome desta câmera:");
-            if (!id) return;
+// --- LÓGICA DO MONITOR ---
+function modoMonitor() {
+    document.getElementById('menu-inicial').style.display = 'none';
+    document.getElementById('tela-monitor').style.display = 'block';
+    peer = new Peer();
 
-            localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true });
-            document.getElementById('webcam').srcObject = localStream;
-            document.getElementById('menu-inicial').style.display = 'none';
-            document.getElementById('tela-camera').style.display = 'block';
-            document.getElementById('cam-id-txt').innerText = "🎥 Câmera: " + id;
+    document.getElementById('btnAdd').onclick = () => {
+        const id = document.getElementById('id-nova-camera').value;
+        if(!id) return;
+        
+        if (!document.getElementById('card-'+id)) criarCard(id);
+        const conn = peer.connect(id);
+        
+        conn.on('open', () => {
+            conexoes[id] = conn;
+            document.getElementById('status').innerText = "✅ Conectado à " + id;
+        });
 
-            peer = new Peer(id, { config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]} });
-            
-            peer.on('connection', conn => {
-                conexoes[conn.peer] = conn;
-                // Envia o stream imediatamente ao conectar
-                peer.call(conn.peer, localStream);
-            });
+        conn.on('data', msg => {
+            if (msg.tipo === 'arquivo') salvarNoBanco(msg);
+        });
+    };
 
-            iniciarLoopGravacao();
-        }
+    peer.on('call', call => {
+        call.answer();
+        call.on('stream', st => {
+            const vid = document.querySelector(`#vid-${call.peer}`);
+            if (vid) {
+                vid.srcObject = st;
+                vid.play().catch(e => console.log("Aguardando interação para áudio"));
+            }
+        });
+    });
+    
+    carregarGaleria();
+}
 
-        function iniciarLoopGravacao() {
-            mediaRecorder = new MediaRecorder(localStream);
-            mediaRecorder.ondataavailable = e => chunks.push(e.data);
-            mediaRecorder.onstop = salvarEEnviarBloco;
-            
-            mediaRecorder.start();
-            console.log("Iniciando bloco de 2 minutos...");
+function criarCard(id) {
+    const div = document.createElement('div');
+    div.id = 'card-'+id;
+    div.className = 'camera-card';
+    div.innerHTML = `
+        <b>📍 ${id}</b> (Ao Vivo)
+        <div class="video-wrapper">
+            <video id="vid-${id}" autoplay muted playsinline style="background:black;"></video>
+        </div>
+    `;
+    document.getElementById('lista-cameras').appendChild(div);
+}
 
-            setTimeout(() => {
-                mediaRecorder.stop();
-                iniciarLoopGravacao(); // Reinicia o ciclo
-            }, TEMPO_GRAVACAO);
-        }
+function salvarNoBanco(msg) {
+    const transaction = db.transaction(["videos"], "readwrite");
+    const store = transaction.objectStore("videos");
+    store.add({ data: msg.data, de: msg.de, time: msg.time });
+    transaction.oncomplete = () => carregarGaleria();
+}
 
-        function salvarEEnviarBloco() {
-            const blob = new Blob(chunks, { type: 'video/webm' });
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = () => {
-                Object.values(conexoes).forEach(conn => {
-                    conn.send({ tipo: 'arquivo', data: reader.result, de: peer.id, timestamp: Date.now() });
-                });
-                chunks = [];
-            };
-        }
-
-        // --- LÓGICA DO MONITOR ---
-        function modoMonitor() {
-            document.getElementById('menu-inicial').style.display = 'none';
-            document.getElementById('tela-monitor').style.display = 'block';
-            peer = new Peer();
-
-            document.getElementById('btnAdd').onclick = () => {
-                const id = document.getElementById('id-nova-camera').value;
-                const conn = peer.connect(id);
-                
-                conn.on('open', () => {
-                    if (!document.getElementById('card-'+id)) criarCard(id);
-                });
-
-                conn.on('data', msg => {
-                    if (msg.tipo === 'arquivo') {
-                        adicionarGaleria(msg.data, msg.de, msg.timestamp);
-                    }
-                });
-            };
-
-            peer.on('call', call => {
-                call.answer();
-                call.on('stream', st => {
-                    const vid = document.querySelector(`#vid-${call.peer}`);
-                    if (vid) vid.srcObject = st;
-                });
-            });
-        }
-
-        function criarCard(id) {
-            const div = document.createElement('div');
-            div.id = 'card-'+id;
-            div.className = 'camera-card';
-            div.innerHTML = `
-                <b>📍 ${id}</b> (Ao Vivo)
-                <div class="video-wrapper"><video id="vid-${id}" autoplay muted playsinline></video></div>
-            `;
-            document.getElementById('lista-cameras').appendChild(div);
-        }
-
-        function adicionarGaleria(url, de, time) {
-            // Salva no localStorage para persistir por 24h
-            const gravacoes = JSON.parse(localStorage.getItem('vigilancia_vids') || '[]');
-            gravacoes.push({ url, de, time });
-            localStorage.setItem('vigilancia_vids', JSON.stringify(gravacoes));
-            
-            renderizarGaleria();
-        }
-
-        function renderizarGaleria() {
-            const lista = document.getElementById('galeria-provas');
-            lista.innerHTML = '';
-            const gravacoes = JSON.parse(localStorage.getItem('vigilancia_vids') || '[]');
-            
-            gravacoes.reverse().forEach(vid => {
+function carregarGaleria() {
+    if(!db) return;
+    const lista = document.getElementById('galeria-provas');
+    lista.innerHTML = '';
+    
+    const store = db.transaction("videos").objectStore("videos");
+    store.openCursor(null, 'prev').onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+            const vid = cursor.value;
+            // Limpeza 24h: Se for mais velho que 24h, deleta e pula
+            if (Date.now() - vid.time > 86400000) {
+                db.transaction(["videos"], "readwrite").objectStore("videos").delete(cursor.key);
+            } else {
                 const item = document.createElement('div');
                 item.className = 'prova-item';
                 item.innerHTML = `
-                    <video src="${vid.url}" controls></video>
+                    <video src="${vid.data}" controls style="width:100%"></video>
                     <br>${vid.de} - ${new Date(vid.time).toLocaleTimeString()}
                 `;
                 lista.appendChild(item);
-            });
+            }
+            cursor.continue();
         }
-
-        function limparGravacoesAntigas() {
-            const agora = Date.now();
-            const vinteQuatroHoras = 24 * 60 * 60 * 1000;
-            let gravacoes = JSON.parse(localStorage.getItem('vigilancia_vids') || '[]');
-            
-            // Filtra apenas o que tem menos de 24 horas
-            gravacoes = gravacoes.filter(vid => (agora - vid.time) < vinteQuatroHoras);
-            
-            localStorage.setItem('vigilancia_vids', JSON.stringify(gravacoes));
-            renderizarGaleria();
+    };
         }
     </script>
 </body>
 </html>
+
