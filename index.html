@@ -88,9 +88,9 @@
             }
         };
 
-        window.onload = () => {
-            document.getElementById('status').innerText = "✅ Sistema Pronto";
-            document.getElementById('btnCam').onclick = modoCamera;
+       window.onload = () => {
+    console.log("Página carregada, iniciando...");
+    document.getElementById('status').innerText = "✅ Sistema Pronto";
             document.getElementById('btnMon').onclick = modoMonitor;
             document.getElementById('btnAdd').onclick = () => {
                 const id = document.getElementById('id-nova-camera').value;
@@ -104,3 +104,4 @@
             if (!id) return;
 
             document.getElementById('status').innerText = "⌛ Carregando IA...";
+
