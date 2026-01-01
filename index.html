@@ -13,55 +13,62 @@
         body { font-family: sans-serif; margin: 0; background: #0a0a0a; color: #fff; text-align: center; }
         .status-badge { padding: 12px; background: #1a1a1a; font-size: 13px; border-bottom: 2px solid #333; color: #10b981; }
         
-        /* Menu e Botões */
         .painel { padding: 30px 20px; }
-        button { width: 85%; max-width: 300px; padding: 18px; margin: 8px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 15px; }
+        button { width: 85%; max-width: 300px; padding: 18px; margin: 8px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 15px; transition: 0.3s; }
+        button:active { transform: scale(0.95); }
+        
         .btn-cam { background: #059669; color: white; }
         .btn-mon { background: #2563eb; color: white; }
         
         /* Estilo Monitor Multi-Câmera */
-        .camera-card { background: #1a1a1a; margin: 10px auto; padding: 15px; width: 90%; border-radius: 12px; border: 1px solid #333; text-align: left; }
-        .camera-card.alert { border-color: #ef4444; background: #2d0a0a; }
-        .cam-name { font-weight: bold; color: #60a5fa; }
+        .camera-card { background: #1a1a1a; margin: 15px auto; padding: 15px; width: 90%; max-width: 500px; border-radius: 12px; border: 1px solid #333; text-align: left; transition: 0.5s; }
+        .camera-card.alert { border-color: #ef4444; background: #2d0a0a; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
+        .cam-name { font-weight: bold; color: #60a5fa; font-size: 1.1em; }
         
         /* Players de Vídeo */
-        .video-wrapper { width: 100%; max-width: 500px; margin: 10px auto; display: none; border-radius: 8px; overflow: hidden; border: 2px solid #ef4444; }
-        video { width: 100%; background: #000; }
+        .video-wrapper { width: 100%; margin-top: 10px; display: none; border-radius: 8px; overflow: hidden; border: 2px solid #ef4444; background: #000; }
+        video { width: 100%; display: block; }
 
         /* Galeria de Provas */
         .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 15px; }
-        .prova-item { background: #222; padding: 8px; border-radius: 8px; font-size: 11px; }
-        .prova-item video { width: 100%; border-radius: 4px; }
-        .btn-dl { color: #22d3ee; display: block; margin-top: 5px; text-decoration: none; border: 1px solid #22d3ee; padding: 3px; border-radius: 4px; }
+        .prova-item { background: #222; padding: 8px; border-radius: 8px; font-size: 11px; border: 1px solid #444; }
+        .prova-item video { width: 100%; border-radius: 4px; margin-bottom: 5px; }
+        .btn-dl { color: #22d3ee; display: block; margin-top: 5px; text-decoration: none; border: 1px solid #22d3ee; padding: 5px; border-radius: 4px; text-align: center; }
+
+        input { padding: 12px; width: 60%; border-radius: 8px; border: 1px solid #444; background: #000; color: #fff; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-    <div id="status" class="status-badge">🟡 Aguardando Inicialização...</div>
+    <div id="status" class="status-badge">🟡 Inicializando IA e Redes...</div>
 
     <div id="menu-inicial" class="painel">
         <h1>🛡️ Smart Guard Multi</h1>
-        <button id="btnCam" class="btn-cam">MODO CÂMERA (Este aparelho filma)</button>
-        <button id="btnMon" class="btn-mon">MODO MONITOR (Ver todas as câmeras)</button>
+        <p>Escolha a função deste aparelho:</p>
+        <button id="btnCam" class="btn-cam">MODO CÂMERA (Filmar)</button><br>
+        <button id="btnMon" class="btn-mon">MODO MONITOR (Ver tudo)</button>
     </div>
 
     <div id="tela-camera" style="display:none;">
-        <video id="webcam" autoplay muted playsinline></video>
-        <p>Aparelho configurado como câmera.</p>
+        <h3>Transmitindo...</h3>
+        <video id="webcam" autoplay muted playsinline style="width: 90%; max-width: 400px; border-radius: 15px; border: 2px solid #059669;"></video>
+        <p id="cam-id-display" style="color: #059669; font-weight: bold;"></p>
+        <p>A IA está monitorando presença humana.</p>
     </div>
 
     <div id="tela-monitor" style="display:none; padding-bottom: 50px;">
         <h3>Central de Monitoramento</h3>
         
-        <div style="background:#1a1a1a; padding:15px; margin:10px; border-radius:10px;">
-            <input type="text" id="id-nova-camera" placeholder="ID da Câmera (ex: sala)" style="padding:12px; width:60%; border-radius:8px; border:none;">
+        <div style="background:#1a1a1a; padding:15px; margin:10px auto; border-radius:10px; max-width: 500px;">
+            <input type="text" id="id-nova-camera" placeholder="ID da Câmera (ex: sala)">
             <button id="btnAdd" style="width:30%; padding:12px; margin:0; font-size:12px;" class="btn-mon">ADICIONAR</button>
         </div>
 
         <div id="lista-cameras">
             </div>
 
-        <h4>📦 Provas Recebidas</h4>
+        <hr style="border: 0; border-top: 1px solid #333; margin: 30px 0;">
+        <h4>📦 Histórico de Detecções</h4>
         <div id="galeria-provas" class="galeria"></div>
     </div>
 
@@ -69,139 +76,31 @@
         let peer, localStream, model, mediaRecorder;
         let chunks = [];
         let gravando = false;
-        let conexoes = {}; // Armazena múltiplas conexões: { 'sala': conn, 'cozinha': conn }
+        let conexoesAtivas = {}; 
 
-        window.onload = () => {
-            document.getElementById('status').innerText = "✅ Pronto";
-            document.getElementById('btnCam').onclick = modoCamera;
-            document.getElementById('btnMon').onclick = modoMonitor;
-            document.getElementById('btnAdd').onclick = conectarNovaCamera;
+        // Configuração para permitir conexão fora da rede local futuramente
+        const peerConfig = {
+            config: {
+                'iceServers': [
+                    { url: 'stun:stun.l.google.com:19302' },
+                    { url: 'stun:stun1.l.google.com:19302' }
+                ]
+            }
         };
 
-        // --- LÓGICA DO APARELHO QUE É CÂMERA ---
-        async function modoCamera() {
-            const id = prompt("Nome desta câmera (ex: sala, garagem):");
-            if (!id) return;
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
-                document.getElementById('webcam').srcObject = localStream;
-                document.getElementById('menu-inicial').style.display = 'none';
-                document.getElementById('tela-camera').style.display = 'block';
-
-                peer = new Peer(id);
-                peer.on('connection', conn => {
-                    conexoes[conn.peer] = conn;
-                    document.getElementById('status').innerText = "Conectado ao Monitor Central";
-                });
-
-                model = await cocoSsd.load({ base: 'mobilenet_v1' });
-                loop();
-            } catch (e) { alert("Erro: " + e.message); }
-        }
-
-        async function loop() {
-            const pred = await model.detect(document.getElementById('webcam'));
-            const invasor = pred.some(p => p.class === 'person' && p.score > 0.6);
-
-            if (invasor && !gravando) {
-                gravando = true; chunks = [];
-                mediaRecorder = new MediaRecorder(localStream, { mimeType: 'video/webm' });
-                mediaRecorder.ondataavailable = e => chunks.push(e.data);
-                mediaRecorder.onstop = enviarProva;
-                mediaRecorder.start();
-                
-                // Avisa todos os monitores e envia vídeo ao vivo
-                Object.values(conexoes).forEach(c => {
-                    c.send({ tipo: 'alerta', estado: 'on' });
-                    peer.call(c.peer, localStream);
-                });
-            } else if (!invasor && gravando) {
-                gravando = false;
-                mediaRecorder.stop();
-                Object.values(conexoes).forEach(c => c.send({ tipo: 'alerta', estado: 'off' }));
-            }
-            requestAnimationFrame(loop);
-        }
-
-        function enviarProva() {
-            const blob = new Blob(chunks, { type: 'video/webm' });
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = () => {
-                Object.values(conexoes).forEach(c => {
-                    c.send({ tipo: 'arquivo', data: reader.result, de: peer.id });
-                });
+        window.onload = () => {
+            document.getElementById('status').innerText = "✅ Sistema Pronto";
+            document.getElementById('btnCam').onclick = modoCamera;
+            document.getElementById('btnMon').onclick = modoMonitor;
+            document.getElementById('btnAdd').onclick = () => {
+                const id = document.getElementById('id-nova-camera').value;
+                conectarNovaCamera(id);
             };
-        }
+        };
 
-        // --- LÓGICA DO APARELHO QUE É MONITOR ---
-        function modoMonitor() {
-            document.getElementById('menu-inicial').style.display = 'none';
-            document.getElementById('tela-monitor').style.display = 'block';
-            peer = new Peer();
-            
-            peer.on('call', call => {
-                call.answer();
-                const wrapper = document.getElementById('video-' + call.peer);
-                if (wrapper) {
-                    wrapper.style.display = 'block';
-                    const vid = wrapper.querySelector('video');
-                    call.on('stream', st => vid.srcObject = st);
-                }
-            });
-        }
+        // --- LÓGICA DA CÂMERA ---
+        async function modoCamera() {
+            const id = prompt("Dê um nome ÚNICO para esta câmera (ex: sala, garagem):");
+            if (!id) return;
 
-        function conectarNovaCamera() {
-            const idCam = document.getElementById('id-nova-camera').value;
-            if (!idCam || conexoes[idCam]) return;
-
-            const conn = peer.connect(idCam);
-            conn.on('open', () => {
-                conexoes[idCam] = conn;
-                document.getElementById('id-nova-camera').value = "";
-                
-                // Cria o card da câmera na tela
-                const div = document.createElement('div');
-                div.id = 'card-' + idCam;
-                div.className = 'camera-card';
-                div.innerHTML = `
-                    <span class="cam-name">📍 Câmera: ${idCam}</span> - <span id="st-${idCam}">Protegido</span>
-                    <div id="video-${idCam}" class="video-wrapper"><video autoplay playsinline></video></div>
-                `;
-                document.getElementById('lista-cameras').appendChild(div);
-
-                conn.on('data', msg => {
-                    const card = document.getElementById('card-' + idCam);
-                    const statusTxt = document.getElementById('st-' + idCam);
-                    const wrapper = document.getElementById('video-' + idCam);
-
-                    if (msg.tipo === 'alerta') {
-                        if (msg.estado === 'on') {
-                            card.classList.add('alert');
-                            statusTxt.innerText = "⚠️ INVASÃO DETECTADA!";
-                        } else {
-                            card.classList.remove('alert');
-                            statusTxt.innerText = "Protegido";
-                            wrapper.style.display = 'none';
-                        }
-                    }
-                    if (msg.tipo === 'arquivo') {
-                        adicionarProva(msg.data, msg.de);
-                    }
-                });
-            });
-        }
-
-        function adicionarProva(url, nome) {
-            const item = document.createElement('div');
-            item.className = 'prova-item';
-            item.innerHTML = `
-                <video src="${url}" controls></video>
-                <b>Origem: ${nome}</b><br>${new Date().toLocaleTimeString()}
-                <a href="${url}" download="prova_${nome}.webm" class="btn-dl">BAIXAR</a>
-            `;
-            document.getElementById('galeria-provas').prepend(item);
-        }
-    </script>
-</body>
-</html>
+            document.getElementById('status').innerText = "⌛ Carregando IA...";
