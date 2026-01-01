@@ -3,10 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Smart Guard Lite - Transmissão Direta</title>
-    
+    <title>Smart Guard Pro - Cloud Edition</title>
     <script src="https://unpkg.com/peerjs@1.3.2/dist/peerjs.min.js"></script>
-
     <style>
         body { font-family: sans-serif; margin: 0; background: #0a0a0a; color: #fff; text-align: center; }
         .status-badge { padding: 12px; background: #111; font-size: 13px; border-bottom: 2px solid #333; color: #3b82f6; }
@@ -14,204 +12,165 @@
         button { width: 85%; max-width: 300px; padding: 18px; margin: 8px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 15px; }
         .btn-cam { background: #059669; color: white; }
         .btn-mon { background: #2563eb; color: white; }
-        
         .camera-card { background: #1a1a1a; margin: 15px auto; padding: 15px; width: 90%; max-width: 450px; border-radius: 12px; border: 1px solid #333; text-align: left; }
         .video-wrapper { width: 100%; border-radius: 8px; overflow: hidden; background: #000; margin-top: 10px; }
         video { width: 100%; display: block; }
-
         .galeria { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; padding: 15px; }
-        .prova-item { background: #222; padding: 8px; border-radius: 8px; font-size: 11px; }
+        .prova-item { background: #222; padding: 8px; border-radius: 8px; font-size: 11px; border: 1px solid #444; }
+        input { padding: 12px; border-radius: 8px; border: none; margin-bottom: 10px; width: 70%; }
     </style>
 </head>
 <body>
 
-    <div id="status" class="status-badge">🔵 Sistema de Transmissão Pronto</div>
+    <div id="status" class="status-badge">🔵 Pronto para Conectar</div>
 
     <div id="menu-inicial" class="painel">
-        <h1>🛡️ Smart Guard Lite</h1>
-        <p>Transmissão Contínua & Gravação 24h</p>
-        <button id="btnCam" class="btn-cam">MODO CÂMERA (Transmitir)</button><br>
-        <button id="btnMon" class="btn-mon">MODO MONITOR (Visualizar)</button>
+        <h1>🛡️ Smart Guard Cloud</h1>
+        <button id="btnCam" class="btn-cam">MODO CÂMERA</button><br>
+        <button id="btnMon" class="btn-mon">MODO MONITOR</button>
     </div>
 
     <div id="tela-camera" style="display:none;">
-        <h3 id="cam-id-txt">Câmera Ativa</h3>
+        <h3 id="cam-id-txt">Transmitindo...</h3>
         <video id="webcam" autoplay muted playsinline style="width: 80%; border-radius: 10px;"></video>
-        <p>📡 Transmitindo e gravando em blocos de 2 min...</p>
+        <p>☁️ Gravando e enviando para o Servidor Nuvem...</p>
     </div>
 
     <div id="tela-monitor" style="display:none;">
         <h3>Central de Monitoramento</h3>
-        <input type="text" id="id-nova-camera" placeholder="ID da Câmera" style="padding:12px; border-radius:8px; border:none; width:150px;">
-        <button id="btnAdd" style="width:auto; padding:12px;" class="btn-mon">VER</button>
+        <input type="text" id="id-nova-camera" placeholder="ID da Câmera">
+        <button id="btnAdd" style="width:auto; padding:12px;" class="btn-mon">CONECTAR</button>
         
         <div id="lista-cameras"></div>
         
-        <h4>🎥 Gravações Recentes (Auto-limpeza 24h)</h4>
+        <hr style="border:1px solid #333; margin:20px;">
+        <h4>🎥 Histórico no Servidor (Últimas 24h)</h4>
+        <button onclick="carregarHistoricoDoServidor()" style="background:#444; font-size:12px; padding:10px;">🔄 Sincronizar Histórico</button>
         <div id="galeria-provas" class="galeria"></div>
     </div>
 
     <script>
-let peer, localStream, mediaRecorder;
-let chunks = [];
-let conexoes = {};
-const TEMPO_GRAVACAO = 120000; // 2 minutos
+        // CONFIGURAÇÃO DO SEU SERVIDOR - ALTERE AQUI!
+        const SERVIDOR_URL = 'http://IP_DO_SEU_SERVIDOR:3000';
 
-// --- INICIALIZAÇÃO E BANCO DE DADOS (IndexedDB para vídeos grandes) ---
-const dbRequest = indexedDB.open("VigilanciaDB", 1);
-let db;
+        let peer, localStream, mediaRecorder;
+        let chunks = [];
+        let conexoes = {};
+        const TEMPO_GRAVACAO = 120000; // 2 minutos
 
-dbRequest.onupgradeneeded = e => {
-    db = e.target.result;
-    db.createObjectStore("videos", { keyPath: "id", autoIncrement: true });
-};
-dbRequest.onsuccess = e => db = e.target.result;
-
-window.onload = () => {
-    document.getElementById('btnCam').onclick = modoCamera;
-    document.getElementById('btnMon').onclick = modoMonitor;
-};
-
-// --- LÓGICA DA CÂMERA ---
-async function modoCamera() {
-    const id = prompt("Nome desta câmera:");
-    if (!id) return;
-
-    try {
-        // Reduzindo a resolução para garantir que a transmissão seja leve
-        localStream = await navigator.mediaDevices.getUserMedia({ 
-            video: { width: 640, height: 480, facingMode: "environment" }, 
-            audio: true 
-        });
-        
-        const videoLocal = document.getElementById('webcam');
-        videoLocal.srcObject = localStream;
-        videoLocal.onloadedmetadata = () => videoLocal.play(); // Força o play
-
-        document.getElementById('menu-inicial').style.display = 'none';
-        document.getElementById('tela-camera').style.display = 'block';
-
-        peer = new Peer(id, { config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]} });
-        
-        peer.on('connection', conn => {
-            conexoes[conn.peer] = conn;
-            console.log("Monitor conectado:", conn.peer);
-            // Liga para o monitor para enviar o vídeo
-            setTimeout(() => peer.call(conn.peer, localStream), 1000);
-        });
-
-        iniciarLoopGravacao();
-    } catch (err) {
-        alert("Erro na Câmera: " + err.message);
-    }
-}
-
-function iniciarLoopGravacao() {
-    mediaRecorder = new MediaRecorder(localStream, { mimeType: 'video/webm;codecs=vp8' });
-    chunks = [];
-    
-    mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-    
-    mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'video/webm' });
-        const reader = new FileReader();
-        reader.readAsDataURL(blob);
-        reader.onloadend = () => {
-            Object.values(conexoes).forEach(conn => {
-                conn.send({ tipo: 'arquivo', data: reader.result, de: peer.id, time: Date.now() });
-            });
+        window.onload = () => {
+            document.getElementById('btnCam').onclick = modoCamera;
+            document.getElementById('btnMon').onclick = modoMonitor;
         };
-        iniciarLoopGravacao(); // Reinicia o ciclo
-    };
-    
-    mediaRecorder.start();
-    setTimeout(() => { if(mediaRecorder.state === "recording") mediaRecorder.stop(); }, TEMPO_GRAVACAO);
-}
 
-// --- LÓGICA DO MONITOR ---
-function modoMonitor() {
-    document.getElementById('menu-inicial').style.display = 'none';
-    document.getElementById('tela-monitor').style.display = 'block';
-    peer = new Peer();
+        // --- LÓGICA DA CÂMERA ---
+        async function modoCamera() {
+            const id = prompt("Nome desta câmera:");
+            if (!id) return;
 
-    document.getElementById('btnAdd').onclick = () => {
-        const id = document.getElementById('id-nova-camera').value;
-        if(!id) return;
-        
-        if (!document.getElementById('card-'+id)) criarCard(id);
-        const conn = peer.connect(id);
-        
-        conn.on('open', () => {
-            conexoes[id] = conn;
-            document.getElementById('status').innerText = "✅ Conectado à " + id;
-        });
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: true });
+                document.getElementById('webcam').srcObject = localStream;
+                document.getElementById('menu-inicial').style.display = 'none';
+                document.getElementById('tela-camera').style.display = 'block';
+                document.getElementById('cam-id-txt').innerText = "🎥 Câmera: " + id;
 
-        conn.on('data', msg => {
-            if (msg.tipo === 'arquivo') salvarNoBanco(msg);
-        });
-    };
+                peer = new Peer(id, { config: {'iceServers': [{ url: 'stun:stun.l.google.com:19302' }]} });
+                
+                peer.on('connection', conn => {
+                    conexoes[conn.peer] = conn;
+                    peer.call(conn.peer, localStream);
+                });
 
-    peer.on('call', call => {
-        call.answer();
-        call.on('stream', st => {
-            const vid = document.querySelector(`#vid-${call.peer}`);
-            if (vid) {
-                vid.srcObject = st;
-                vid.play().catch(e => console.log("Aguardando interação para áudio"));
-            }
-        });
-    });
-    
-    carregarGaleria();
-}
-
-function criarCard(id) {
-    const div = document.createElement('div');
-    div.id = 'card-'+id;
-    div.className = 'camera-card';
-    div.innerHTML = `
-        <b>📍 ${id}</b> (Ao Vivo)
-        <div class="video-wrapper">
-            <video id="vid-${id}" autoplay muted playsinline style="background:black;"></video>
-        </div>
-    `;
-    document.getElementById('lista-cameras').appendChild(div);
-}
-
-function salvarNoBanco(msg) {
-    const transaction = db.transaction(["videos"], "readwrite");
-    const store = transaction.objectStore("videos");
-    store.add({ data: msg.data, de: msg.de, time: msg.time });
-    transaction.oncomplete = () => carregarGaleria();
-}
-
-function carregarGaleria() {
-    if(!db) return;
-    const lista = document.getElementById('galeria-provas');
-    lista.innerHTML = '';
-    
-    const store = db.transaction("videos").objectStore("videos");
-    store.openCursor(null, 'prev').onsuccess = (e) => {
-        const cursor = e.target.result;
-        if (cursor) {
-            const vid = cursor.value;
-            // Limpeza 24h: Se for mais velho que 24h, deleta e pula
-            if (Date.now() - vid.time > 86400000) {
-                db.transaction(["videos"], "readwrite").objectStore("videos").delete(cursor.key);
-            } else {
-                const item = document.createElement('div');
-                item.className = 'prova-item';
-                item.innerHTML = `
-                    <video src="${vid.data}" controls style="width:100%"></video>
-                    <br>${vid.de} - ${new Date(vid.time).toLocaleTimeString()}
-                `;
-                lista.appendChild(item);
-            }
-            cursor.continue();
+                iniciarLoopGravacao();
+            } catch (e) { alert("Erro ao acessar câmera: " + e.message); }
         }
-    };
+
+        function iniciarLoopGravacao() {
+            mediaRecorder = new MediaRecorder(localStream);
+            mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+            mediaRecorder.onstop = salvarEEnviarBloco;
+            
+            mediaRecorder.start();
+            setTimeout(() => { if(mediaRecorder.state === "recording") mediaRecorder.stop(); }, TEMPO_GRAVACAO);
+        }
+
+        async function salvarEEnviarBloco() {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            chunks = []; // Reseta para o próximo bloco
+
+            // 1. Envia para o Monitor (PeerJS)
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+                Object.values(conexoes).forEach(conn => {
+                    conn.send({ tipo: 'arquivo', data: reader.result, de: peer.id, time: Date.now() });
+                });
+            };
+
+            // 2. Envia para o Servidor (Upload HTTP)
+            const formData = new FormData();
+            formData.append('video', blob);
+            formData.append('cameraID', peer.id);
+
+            try {
+                await fetch(`${SERVIDOR_URL}/upload`, { method: 'POST', body: formData });
+                console.log("✅ Backup salvo no servidor");
+            } catch (err) { console.error("❌ Falha no backup servidor", err); }
+
+            iniciarLoopGravacao(); // Inicia novo ciclo de 2 min
+        }
+
+        // --- LÓGICA DO MONITOR ---
+        function modoMonitor() {
+            document.getElementById('menu-inicial').style.display = 'none';
+            document.getElementById('tela-monitor').style.display = 'block';
+            peer = new Peer();
+
+            document.getElementById('btnAdd').onclick = () => {
+                const id = document.getElementById('id-nova-camera').value;
+                const conn = peer.connect(id);
+                conn.on('open', () => { if (!document.getElementById('card-'+id)) criarCard(id); });
+                conn.on('data', msg => { if (msg.tipo === 'arquivo') carregarHistoricoDoServidor(); });
+            };
+
+            peer.on('call', call => {
+                call.answer();
+                call.on('stream', st => {
+                    const vid = document.querySelector(`#vid-${call.peer}`);
+                    if (vid) vid.srcObject = st;
+                });
+            });
+
+            carregarHistoricoDoServidor();
+        }
+
+        function criarCard(id) {
+            const div = document.createElement('div');
+            div.id = 'card-'+id;
+            div.className = 'camera-card';
+            div.innerHTML = `<b>📍 ${id}</b><div class="video-wrapper"><video id="vid-${id}" autoplay muted playsinline></video></div>`;
+            document.getElementById('lista-cameras').appendChild(div);
+        }
+
+        async function carregarHistoricoDoServidor() {
+            try {
+                const res = await fetch(`${SERVIDOR_URL}/lista-videos`);
+                const videos = await res.json();
+                const lista = document.getElementById('galeria-provas');
+                lista.innerHTML = '';
+
+                videos.reverse().forEach(vid => {
+                    const item = document.createElement('div');
+                    item.className = 'prova-item';
+                    item.innerHTML = `
+                        <video src="${vid.url}" controls style="width:100%"></video>
+                        <br><small>${new Date(vid.time).toLocaleString()}</small>
+                    `;
+                    lista.appendChild(item);
+                });
+            } catch (err) { console.log("Servidor offline ou ainda sem vídeos."); }
         }
     </script>
 </body>
 </html>
-
